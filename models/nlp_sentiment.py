@@ -38,12 +38,15 @@ if __name__ == "__main__":
 
     analyzer = FinBERTSentiment()
 
-    apple_new = {'ticker': 'AAPL', 'headline': 'Apple vs Tesla in 2026: Which Stock Will Anchor Your Retirement' 
-                 'and Which Will Wreck It?', 'summary': 'Apple (NASDAQ: AAPL) and Tesla (NASDAQ: TSLA) both may' 
-                 'command intense customer loyalty through a shared focus on premium design and disruptive innovation,' 
-                 'but they sit at opposite ends of the retirement-suitability spectrum in 2026. One has spent the past '
-                 'year building durable competitive advantages and rewarding shareholders with consistency. The other is' 
-                 ' executing an ... Apple vs Tesla in 2026: Which Stock Will Anchor Your Retirement and Which Will Wreck It?'}
+    apple_new = {'ticker': 'AAPL', 'headline': 'Atlassian job cuts raise the question: '
+                 'Is AI driving layoffs?', 'summary': 'Atlassian (TEAM) plans to cut about 10%' 
+                 'of its workforce as it shifts more resources toward artificial intelligence ('
+                 'AI). Investopedia editor in chief Caleb Silver joins Morning Brief host Julie '
+                 'Hyman to discuss whether companies truly are cutting jobs because of AI, '
+                 'highlighting how investors are increasingly focused on productivity per '
+                 'employee, with companies like Nvidia (NVDA) and Apple (AAPL) leading the '
+                 'pack. To watch more expert insights and analysis on the latest market '
+                 'action, check out more Morning Brief.'}
     
     ticker = apple_new['ticker']
     headline = apple_new['headline']

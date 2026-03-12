@@ -1,8 +1,11 @@
 import httpx
 import time
-import os
-from datetime import datetime, timedelta
+import os, sys
+from datetime import datetime, timedelta, timezone
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
+
+from utils.news_filters import is_article_relevant
 
 load_dotenv()
 
@@ -22,7 +25,7 @@ TICKERS = [
 
 def fetch_daily_news(ticker: str, lookback_days: int = 1) -> list:
     
-    end_date = datetime.now()
+    end_date = datetime.now(timezone.utc)
     start_date = end_date - timedelta(days = lookback_days)
 
     params = {
@@ -50,20 +53,24 @@ def run_news_pipeline():
         news_items = fetch_daily_news(ticker, lookback_days=1)
 
         for item in news_items:
-            clean_item = {
-                "ticker": ticker,
-                "timestamp": datetime.fromtimestamp(item['datetime']),
-                "headline": item['headline'],
-                "summary": item['summary'],
-                "source": item['source'],
-                "url": item['url']
-            }
-            all_news_data.append(clean_item)
+            headline = item['headline']
+            summary = item['summary']
+
+            if is_article_relevant(ticker, headline, summary):
+                clean_item = {
+                    "ticker": ticker,
+                    "timestamp": datetime.fromtimestamp(item['datetime'], tz=timezone.utc),
+                    "headline": headline,
+                    "summary": summary,
+                    "source": item['source'],
+                    "url": item['url']
+                }
+                all_news_data.append(clean_item)
 
         time.sleep(1)
 
-        print(f"Pipeline completed. Fetched {len(all_news_data)} total articles.")
-        return all_news_data
+    print(f"\nPipeline complete. Fetched and verified {len(all_news_data)} highly relevant articles.")
+    return all_news_data
 
 if __name__ == "__main__":
     latest_news = run_news_pipeline()
@@ -71,4 +78,3 @@ if __name__ == "__main__":
     if latest_news:
         print("Sample output for news:")
         print(latest_news[0])
-        
