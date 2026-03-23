@@ -59,7 +59,7 @@ def run_news_pipeline():
             if is_article_relevant(ticker, headline, summary):
                 clean_item = {
                     "ticker": ticker,
-                    "timestamp": datetime.fromtimestamp(item['datetime'], tz=timezone.utc),
+                    "timestamp": datetime.fromtimestamp(item['datetime'], tz=timezone.utc).isoformat(),
                     "headline": headline,
                     "summary": summary,
                     "source": item['source'],
@@ -70,6 +70,14 @@ def run_news_pipeline():
         time.sleep(1)
 
     print(f"\nPipeline complete. Fetched and verified {len(all_news_data)} highly relevant articles.")
+
+    import json
+    import os
+
+    os.makedirs("data/local_storage", exist_ok=True)
+    with open("data/local_storage/latest_news.json", "w") as f:
+        json.dump(all_news_data[:10], f, indent=4)
+
     return all_news_data
 
 if __name__ == "__main__":

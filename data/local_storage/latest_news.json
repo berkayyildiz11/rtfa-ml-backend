@@ -1,0 +1,82 @@
+[
+    {
+        "ticker": "AAPL",
+        "timestamp": "2026-03-23T11:01:59+00:00",
+        "headline": "Apple China Revenue Jumps 38% as Cook Addresses App Store Pressure",
+        "summary": "CEO Tim Cook praises Chinese developers and supply chain ties after fee cuts, while regulators signal further App Store scrutiny.",
+        "source": "Yahoo",
+        "url": "https://finnhub.io/api/news?id=a67098c2d86600084b119e5487fd8dfe4d26f0279c9813b3a13b938836c93a63"
+    },
+    {
+        "ticker": "AAPL",
+        "timestamp": "2026-03-23T10:46:32+00:00",
+        "headline": "Market Chatter: Google, Amazon, Apple Face EU 'Gatekeeper' Designation Push Over Smart TVs, Virtual Assistants",
+        "summary": "Alphabet's (GOOGL, GOOG) Google, Amazon (AMZN), Apple (AAPL) and Samsung's smart televisions and vir",
+        "source": "Yahoo",
+        "url": "https://finnhub.io/api/news?id=a78a8cf142c1351aa7137353ab2c503a245ca2a2120413cc387ad85171eef807"
+    },
+    {
+        "ticker": "AAPL",
+        "timestamp": "2026-03-23T10:27:00+00:00",
+        "headline": "How to Win the Loser\u2019s Game",
+        "summary": "How good do you think your chances are of guessing the best-performing stock of the next 100 years?  The winning stock might not exist yet: Today\u2019s superstars like  Nvidia  Apple  Microsoft  and leading consumer brands like  Nike  McDonald\u2019  and  Walmart  weren\u2019t even a twinkle in their founders\u2019 eyes in 1926.  One dollar invested 100 years ago in cigarette maker Philip Morris (now  Altria  ) turned into $4.42 million by the end of last year, including dividends and spinoffs.",
+        "source": "Yahoo",
+        "url": "https://finnhub.io/api/news?id=0234571ba0097c4b291d7a125220e9552d557593e46a538672f16f6c11afd89c"
+    },
+    {
+        "ticker": "AAPL",
+        "timestamp": "2026-03-23T09:01:32+00:00",
+        "headline": "Exclusive-EU digital rules should apply to Big Tech's smart TVs, broadcasters tell antitrust chief",
+        "summary": "Google, Amazon, Apple and Samsung's smart TVs and virtual assistants should fall under the EU's toughest tech rules because of their growing market power, the world's largest \u200cbroadcasters told EU antitrust chief Teresa Ribera on Monday. The call by the Association of Commercial Television and Video \u200con Demand Services in Europe (ACT) whose members include Canal+, RTL, Mediaset, ITV, Paramount+, NBCUniversal, Walt Disney, Warner Bros Discovery, Sky and TF1 Groupe comes amid \u200bmounting concerns among broadcasters over Big Tech's encroachment into their industry as they push back against their rivals.",
+        "source": "Yahoo",
+        "url": "https://finnhub.io/api/news?id=be4c12f7068cc2f7f0e01c102c3399f372ea1dbbf2b78fa2a4c18e78aed90ed8"
+    },
+    {
+        "ticker": "AAPL",
+        "timestamp": "2026-03-22T18:19:00+00:00",
+        "headline": "Apple Stock Is Doing Something It Hasn't Done Since 2022. Should You Buy or Run?",
+        "summary": "Apple shows a clear pattern over the last two decades.",
+        "source": "Yahoo",
+        "url": "https://finnhub.io/api/news?id=d7d64cd27ea750aa6a5852bf35936a367825544787dd032bf291b902b96476ac"
+    },
+    {
+        "ticker": "AAPL",
+        "timestamp": "2026-03-22T16:32:14+00:00",
+        "headline": "Coinbase Launches 24/7 Stock Trading For Tesla, Apple, Nvidia With 10X Leverage",
+        "summary": "Coinbase launched stock perpetual futures for eligible non-U.S. users offering 24/7 leveraged synthetic exposure to Tesla , Apple, Nvidia, and other Magnificent 7 stocks with up to 10x leverage. The \u2018Everything Exchange\u2019 Expansion Coinbase becomes one of the first major...",
+        "source": "Yahoo",
+        "url": "https://finnhub.io/api/news?id=6c9261cb75e39009e293af41ae72bb6297854856b2319dea4adef344e08a9e96"
+    },
+    {
+        "ticker": "AAPL",
+        "timestamp": "2026-03-22T11:06:33+00:00",
+        "headline": "Apple\u2019s China Smartphone Push Raises Questions On Margins And Valuation",
+        "summary": "Apple reports a 23% surge in China smartphone sales, outpacing a declining market. The company is expanding share by using e-commerce discounts and qualifying the base iPhone 17 for government subsidies. Apple is absorbing higher memory chip costs instead of raising prices, supporting its competitive position in the region. For investors tracking NasdaqGS:AAPL, this shift in China comes at a time when the stock is priced at $247.99 and has returned 14.1% over the past year and 110.1% over...",
+        "source": "Yahoo",
+        "url": "https://finnhub.io/api/news?id=81c28b236a0bf20cebe5303ed8251d22dc285d0eeadc7e4eba4c5cc726eedc11"
+    },
+    {
+        "ticker": "AAPL",
+        "timestamp": "2026-03-22T07:02:51+00:00",
+        "headline": "Apple's Best-Ever Mac Launch, Google's Gemini On Mac, Amazon's 'Transformer' Project And More: This Week In Appleverse",
+        "summary": "Weekend tech and finance highlights saw Apple&#39;s new Mac launch break records, Google tests a Gemini AI app, and Amazon develops an AI-driven smartphone project.",
+        "source": "Benzinga",
+        "url": "https://finnhub.io/api/news?id=5eeb07215b6c2158e7e16fabbfcde74e7563b7988c153704ee26fa3b41b37ae0"
+    },
+    {
+        "ticker": "AAPL",
+        "timestamp": "2026-03-22T06:24:20+00:00",
+        "headline": "Apple CEO Praises China Partners as Beijing Applies Pressure",
+        "summary": "Cook, speaking at the China Development Forum in Beijing on Sunday, praised the innovations of Chinese developers and the automation at the country\u2019s manufacturing facilities.  Apple lowered the fees it collects from app developers in the country earlier this month, a major concession in a hugely lucrative market where the company faced the risk of antitrust intervention by local regulators.",
+        "source": "Yahoo",
+        "url": "https://finnhub.io/api/news?id=6350554bd0125816b18186bc9e1878680c6c004ac819f444031c2395d796f5d5"
+    },
+    {
+        "ticker": "MSFT",
+        "timestamp": "2026-03-23T10:27:00+00:00",
+        "headline": "How to Win the Loser\u2019s Game",
+        "summary": "How good do you think your chances are of guessing the best-performing stock of the next 100 years?  The winning stock might not exist yet: Today\u2019s superstars like  Nvidia  Apple  Microsoft  and leading consumer brands like  Nike  McDonald\u2019  and  Walmart  weren\u2019t even a twinkle in their founders\u2019 eyes in 1926.  One dollar invested 100 years ago in cigarette maker Philip Morris (now  Altria  ) turned into $4.42 million by the end of last year, including dividends and spinoffs.",
+        "source": "Yahoo",
+        "url": "https://finnhub.io/api/news?id=0234571ba0097c4b291d7a125220e9552d557593e46a538672f16f6c11afd89c"
+    }
+]
