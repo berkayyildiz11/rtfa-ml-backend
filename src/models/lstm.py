@@ -13,6 +13,7 @@ from src.data.mongodb_loader import load_stock_data, load_sp500_data
 
 
 WINDOW_SIZE = 30 
+FORECAST_HORIZON = 1
 BATCH_SIZE = 32
 EPOCHS = 20
 LR = 1e-3
@@ -25,6 +26,7 @@ FEATURE_COLUMNS = [
     "volume",
     "log_return",
     "macd",
+    "rsi_14",
     "sp500_value",
     "sp500_log_return",
     "vix",
@@ -41,22 +43,58 @@ def prepare_dataframe(stock_df: pd.DataFrame, sp500_df: pd.DataFrame) -> pd.Data
     stock_df["date"] = pd.to_datetime(stock_df["date"])
     sp500_df["date"] = pd.to_datetime(sp500_df["date"])
 
+    stock_df = stock_df.sort_values(["ticker", "date"])
     sp500_df = sp500_df.sort_values("date")
-    sp500_df["sp500_log_return"] = np.log(sp500_df["close"] / sp500_df["close"].shift(1))
+
+    sp500_df["sp500_log_return"] = np.log(
+        sp500_df["close"] / sp500_df["close"].shift(1)
+    )
 
     sp500_features = sp500_df[
-        ["date", "close", "vix", "rsi_14", "beta", "correlation_sp_vix", "sp500_log_return"]
-    ].rename(columns={"close": "sp500_close"})
+        [
+            "date",
+            "close",
+            "vix",
+            "rsi_14",
+            "beta",
+            "correlation_sp_vix",
+            "sp500_log_return",
+        ]
+    ].rename(
+        columns={
+            "close": "sp500_close",
+            "rsi_14": "sp500_rsi_14",
+        }
+    )
 
     df = stock_df.merge(sp500_features, on="date", how="inner")
 
     if "sp500_value" not in df.columns:
         df["sp500_value"] = df["sp500_close"]
 
-    df["relative_return"] = df["log_return"] - df["sp500_log_return"]
+    df["future_stock_return"] = (
+        df.groupby("ticker")["log_return"]
+        .transform(
+            lambda x: x.shift(-1)
+            .rolling(window=FORECAST_HORIZON)
+            .sum()
+            .shift(-(FORECAST_HORIZON - 1))
+        )
+    )
 
-    df = df.sort_values(["ticker", "date"])
-    df[TARGET_COLUMN] = df.groupby("ticker")["relative_return"].shift(-1)
+    df["future_sp500_return"] = (
+        df.groupby("ticker")["sp500_log_return"]
+        .transform(
+            lambda x: x.shift(-1)
+            .rolling(window=FORECAST_HORIZON)
+            .sum()
+            .shift(-(FORECAST_HORIZON - 1))
+        )
+    )
+
+    df[TARGET_COLUMN] = (
+        df["future_stock_return"] - df["future_sp500_return"]
+    )
 
     df = df.dropna(subset=FEATURE_COLUMNS + [TARGET_COLUMN])
 
