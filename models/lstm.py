@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 
-from src.data.mondodb_dataloader import load_stock_data, load_sp500_data
+from src.data.mongodb_loader import load_stock_data, load_sp500_data
 
 
 WINDOW_SIZE = 30 
