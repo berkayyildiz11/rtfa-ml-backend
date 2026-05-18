@@ -186,9 +186,13 @@ def evaluate(model, loader, device):
         "directional_accuracy": directional_accuracy
     }
 
-def run_lstm_relative():
-    stock_df = load_stock_data()
-    sp500_df = load_sp500_data()
+def run_lstm_relative(stock_csv_path=None, sp500_csv_path=None):
+    if stock_csv_path and sp500_csv_path:
+        stock_df = pd.read_csv(stock_csv_path)
+        sp500_df = pd.read_csv(sp500_csv_path)
+    else:
+        stock_df = load_stock_data()
+        sp500_df = load_sp500_data()
 
     df = prepare_dataframe(stock_df, sp500_df)
 
@@ -203,13 +207,19 @@ def run_lstm_relative():
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+    )
 
     model = LSTMRelativeReturnModel(
         input_size=len(FEATURE_COLUMNS),
         hidden_size=64,
         num_layers=2,
-        dropout=0.2
+        dropout=0.2,
     ).to(device)
 
     criterion = nn.MSELoss()
@@ -221,23 +231,28 @@ def run_lstm_relative():
             loader=train_loader,
             criterion=criterion,
             optimizer=optimizer,
-            device=device
+            device=device,
         )
 
         val_metrics = evaluate(model, val_loader, device)
 
-        print(f"\nEpoch {epoch+1}/{EPOCHS}")
+        print(f"\nEpoch {epoch + 1}/{EPOCHS}")
         print(f"Train Loss: {train_loss:.6f}")
         print(f"Validation: {val_metrics}")
 
-        print(f"Final Test Evaluation:")
-        test_metrics = evaluate(model, test_loader, device)
-        print(test_metrics)
+    print("\nFinal Test Evaluation:")
+    test_metrics = evaluate(model, test_loader, device)
+    print(test_metrics)
 
-        Path("models/lstm/saved_models").mkdir(parents=True, exist_ok=True)
-        torch.save(model.state_dict(), "models/lstm/saved_models/lstm_relative_return.pt")
+    save_dir = Path("saved_models/lstm")
+    save_dir.mkdir(parents=True, exist_ok=True)
 
-        return model, scaler, test_metrics
+    torch.save(
+        model.state_dict(),
+        save_dir / "lstm_relative_return.pt",
+    )
+
+    return model, scaler, test_metrics
     
 
 if __name__ == "__main__":
