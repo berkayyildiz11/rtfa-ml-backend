@@ -25,7 +25,6 @@ FEATURE_COLUMNS = [
     "volume",
     "log_return",
     "macd",
-    "rsi_14",
     "sp500_value",
     "sp500_log_return",
     "vix",
