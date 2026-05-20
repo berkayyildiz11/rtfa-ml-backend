@@ -1,0 +1,6 @@
+run_id,horizon,forecast_horizon,neutral_threshold,neutral_weight,epochs,early_stopping_patience,val_accuracy,val_macro_f1,val_weighted_f1,test_accuracy,test_macro_f1,test_weighted_f1,neutral_recall,test_behavior,notes
+1,1w,5,0.01,1.5,30,10,0.3623,0.3352,0.3504,0.3744,0.2955,0.3205,0.08,balanced_best,Best overall validation behavior; predicts all classes
+2,1w,5,0.01,0.0,15,5,0.3097,0.2466,0.2709,0.4115,0.305,0.3602,0.02,worse_dominant,Higher accuracy but nearly ignores neutral
+3,1w,5,0.0075,1.2,15,5,0.3539,0.2706,0.3236,0.4474,0.3132,0.3989,0.01,worse_better_biased,Highest accuracy/weighted F1 but neutral nearly absent
+4,1w,5,0.01,1.2,15,5,0.3195,0.2555,0.2798,0.4288,0.3328,0.3821,0.03,better_dominant,Strong better recall but poor neutral prediction
+5,1w,5,0.01,1.4,30,10,0.3208,0.3008,0.3041,0.4423,0.2539,0.3086,0.03,worse_collapsed,Validation looked balanced but test collapsed into worse

@@ -16,13 +16,12 @@ from src.data.mongodb_loader import load_stock_data, load_sp500_data
 
 
 WINDOW_SIZE = 30
-FORECAST_HORIZON = 5
 BATCH_SIZE = 32
 EPOCHS = 30
 LR = 3e-4
 EARLY_STOPPING_PATIENCE = 10
 
-NEUTRAL_THRESHOLD = 0.01
+NEUTRAL_THRESHOLD = 0.03
 NUM_CLASSES = 3
 
 TARGET_RETURN_COLUMN = "target_relative_return"
@@ -35,8 +34,20 @@ FEATURE_COLUMNS = [
     "vix", "beta", "correlation_sp_vix",
 ]
 
+HORIZON_CONFIGS = {
+    "1d": 1,
+    "1w": 5,
+    "1m": 21,
+    "3m": 63,
+    "6m": 126,
+}
 
-def prepare_dataframe(stock_df: pd.DataFrame, sp500_df: pd.DataFrame) -> pd.DataFrame:
+
+def prepare_dataframe(
+    stock_df: pd.DataFrame,
+    sp500_df: pd.DataFrame,
+    forecast_horizon: int,
+) -> pd.DataFrame:
     stock_df = stock_df.copy()
     sp500_df = sp500_df.copy()
 
@@ -63,9 +74,9 @@ def prepare_dataframe(stock_df: pd.DataFrame, sp500_df: pd.DataFrame) -> pd.Data
         df.groupby("ticker")["relative_return"]
         .transform(
             lambda x: x.shift(-1)
-            .rolling(window=FORECAST_HORIZON)
+            .rolling(window=forecast_horizon)
             .sum()
-            .shift(-(FORECAST_HORIZON - 1))
+            .shift(-(forecast_horizon - 1))
         )
     )
 
@@ -246,7 +257,12 @@ def save_metrics(metrics, save_path):
         json.dump(serializable_metrics, f, indent=4)
 
 
-def run_lstm_relative(stock_csv_path=None, sp500_csv_path=None):
+def run_lstm_relative(
+    horizon_name="1w",
+    forecast_horizon=5,
+    stock_csv_path=None,
+    sp500_csv_path=None,
+):
     if stock_csv_path and sp500_csv_path:
         stock_df = pd.read_csv(stock_csv_path)
         sp500_df = pd.read_csv(sp500_csv_path)
@@ -254,8 +270,8 @@ def run_lstm_relative(stock_csv_path=None, sp500_csv_path=None):
         stock_df = load_stock_data()
         sp500_df = load_sp500_data()
 
-    df = prepare_dataframe(stock_df, sp500_df)
-
+    df = prepare_dataframe(stock_df, sp500_df, forecast_horizon)
+    
     train_df, val_df, test_df = chronological_split(df)
     train_df, val_df, test_df, scaler = scale_features(train_df, val_df, test_df)
 
@@ -290,11 +306,7 @@ def run_lstm_relative(stock_csv_path=None, sp500_csv_path=None):
         dropout=0.1,
     ).to(device)
 
-    class_weights = torch.tensor([1.0, 1.5, 1.0], dtype=torch.float32).to(device)
-
-    print("\nLoss class weights:")
-    print(class_weights)
-
+    class_weights = torch.tensor([1.0, 1.2, 1.0], dtype=torch.float32).to(device)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-4)
 
@@ -332,7 +344,7 @@ def run_lstm_relative(stock_csv_path=None, sp500_csv_path=None):
             best_model_state = copy.deepcopy(model.state_dict())
             best_val_metrics = val_metrics
             epochs_without_improvement = 0
-            torch.save(best_model_state, save_dir / "best_lstm_5d.pt")
+            torch.save(best_model_state, save_dir / f"best_lstm_{horizon_name}.pt")
         else:
             epochs_without_improvement += 1
 
@@ -360,11 +372,14 @@ def run_lstm_relative(stock_csv_path=None, sp500_csv_path=None):
     print("Confusion Matrix:")
     print(test_metrics["confusion_matrix"])
 
-    torch.save(model.state_dict(), save_dir / "final_lstm_5d.pt")
-    save_metrics(test_metrics, save_dir / "lstm_5d_test_metrics.json")
+    torch.save(model.state_dict(), save_dir / f"final_lstm_{horizon_name}.pt")
+    save_metrics(test_metrics, save_dir / f"lstm_{horizon_name}_test_metrics.json")
 
     return model, scaler, test_metrics
 
 
 if __name__ == "__main__":
-    run_lstm_relative()
+    run_lstm_relative(
+        horizon_name="6m",
+        forecast_horizon=HORIZON_CONFIGS["6m"],
+    )
