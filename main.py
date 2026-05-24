@@ -23,3 +23,9 @@ def get_latest_news():
         return {"status": "success", "total": len(news_data), "data": news_data}
     except FileNotFoundError:
         return {"status": "error", "message": "News data not found. Run fetcher.py first."}
+    
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
