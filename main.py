@@ -15,39 +15,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+NEWS_CACHE = {
+    "data": [],
+    "last_updated": None
+}
+
 @app.get("/api/news")
-def get_latest_news(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=50)
-):
-    try:
-        with open("data/local_storage/latest_news.json", "r") as f:
-            news_data = json.load(f)
+def get_latest_news(page: int = 1, limit: int = 10):
+    now = datetime.now(timezone.utc)
 
-        total = len(news_data)
+    cache_expired = (
+        NEWS_CACHE["last_updated"] is None or
+        now - NEWS_CACHE["last_updated"] > timedelta(minutes=30)
+    )
 
-        start = (page - 1) * limit
-        end = start + limit
+    if cache_expired:
+        NEWS_CACHE["data"] = run_news_pipeline()
+        NEWS_CACHE["last_updated"] = now
 
-        paginated_news = news_data[start:end]
+    news_data = NEWS_CACHE["data"]
 
-        return {
-            "status": "success",
-            "page": page,
-            "limit": limit,
-            "total": total,
-            "totalPages": (total + limit - 1) // limit,
-            "data": paginated_news
-        }
+    total = len(news_data)
+    start = (page - 1) * limit
+    end = start + limit
 
-    except FileNotFoundError:
-        return {
-            "status": "error",
-            "message": "News data not found. Run fetcher.py first."
-        }
-    
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+    return {
+        "status": "success",
+        "page": page,
+        "limit": limit,
+        "total": total,
+        "totalPages": (total + limit - 1) // limit,
+        "data": news_data[start:end],
+    }
