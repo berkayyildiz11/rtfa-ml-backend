@@ -76,7 +76,19 @@ def run_news_pipeline():
 
     os.makedirs("data/local_storage", exist_ok=True)
     with open("data/local_storage/latest_news.json", "w") as f:
-        json.dump(all_news_data[:10], f, indent=4)
+
+        unique_news = {}
+
+        for item in all_news_data:
+            unique_key = f"{item['url']}-{item['timestamp']}-{item['ticker']}"
+
+            if unique_key not in unique_news:
+                unique_news[unique_key] = item
+
+        all_news_data = list(unique_news.values())
+
+        all_news_data.sort(key=lambda x: x["timestamp"], reverse=True)
+        json.dump(all_news_data, f, indent=4)
 
     return all_news_data
 

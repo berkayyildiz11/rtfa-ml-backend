@@ -1,5 +1,6 @@
 # main.py
 from fastapi import FastAPI
+from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
 import json
 
@@ -15,14 +16,35 @@ app.add_middleware(
 )
 
 @app.get("/api/news")
-def get_latest_news():
-    """Reads the local JSON file and serves it to Next.js"""
+def get_latest_news(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=50)
+):
     try:
         with open("data/local_storage/latest_news.json", "r") as f:
             news_data = json.load(f)
-        return {"status": "success", "total": len(news_data), "data": news_data}
+
+        total = len(news_data)
+
+        start = (page - 1) * limit
+        end = start + limit
+
+        paginated_news = news_data[start:end]
+
+        return {
+            "status": "success",
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "totalPages": (total + limit - 1) // limit,
+            "data": paginated_news
+        }
+
     except FileNotFoundError:
-        return {"status": "error", "message": "News data not found. Run fetcher.py first."}
+        return {
+            "status": "error",
+            "message": "News data not found. Run fetcher.py first."
+        }
     
 
 
