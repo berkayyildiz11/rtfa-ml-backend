@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 
-from utils.news_filters import is_article_relevant
+from src.utils.news_filters import is_article_relevant
 
 load_dotenv()
 
