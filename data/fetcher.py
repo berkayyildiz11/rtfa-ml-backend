@@ -11,9 +11,6 @@ load_dotenv()
 
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 
-if not FINNHUB_API_KEY:
-    raise ValueError("API Key is not found! Please check your .env file.")
-
 BASE_URL = "https://finnhub.io/api/v1/company-news"
 
 TICKERS = [ 
