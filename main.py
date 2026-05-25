@@ -3,6 +3,8 @@ from fastapi import FastAPI
 from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
 import json
+from datetime import datetime, timezone, timedelta
+from data.fetcher import run_news_pipeline
 
 app = FastAPI()
 
