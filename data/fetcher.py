@@ -5,14 +5,11 @@ from datetime import datetime, timedelta, timezone
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 
-from utils.news_filters import is_article_relevant
+from src.utils.news_filters import is_article_relevant
 
 load_dotenv()
 
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
-
-if not FINNHUB_API_KEY:
-    raise ValueError("API Key is not found! Please check your .env file.")
 
 BASE_URL = "https://finnhub.io/api/v1/company-news"
 
@@ -76,7 +73,19 @@ def run_news_pipeline():
 
     os.makedirs("data/local_storage", exist_ok=True)
     with open("data/local_storage/latest_news.json", "w") as f:
-        json.dump(all_news_data[:10], f, indent=4)
+
+        unique_news = {}
+
+        for item in all_news_data:
+            unique_key = f"{item['url']}-{item['timestamp']}-{item['ticker']}"
+
+            if unique_key not in unique_news:
+                unique_news[unique_key] = item
+
+        all_news_data = list(unique_news.values())
+
+        all_news_data.sort(key=lambda x: x["timestamp"], reverse=True)
+        json.dump(all_news_data, f, indent=4)
 
     return all_news_data
 
