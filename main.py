@@ -5,6 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import json
 from datetime import datetime, timezone, timedelta
 from data.fetcher import run_news_pipeline
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 
