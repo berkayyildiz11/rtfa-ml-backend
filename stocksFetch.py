@@ -9,7 +9,7 @@ MONGO_URI = "mongodb+srv://yorgahuseyin_db_user:212123@cluster0.qmrzavq.mongodb.
 
 client = MongoClient(MONGO_URI)
 db = client["stock_tracking_db"]
-collection = db["historical_prices"]
+collection = db["sp500_datas2"]
 
 # 2. Define your 20 stocks and the timeframe
 tickers = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "NFLX", "INTC", 
