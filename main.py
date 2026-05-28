@@ -26,7 +26,7 @@ STOCKS = [
 
 client = AsyncIOMotorClient(MONGO_URI)
 db = client.stock_tracking_db
-trades_col = db.sp500_datas2  # Time Series Collection
+trades_col = db.sp500deneme  # Time Series Collection
 
 # --- 2. BORSA WORKER FONKSİYONLARI ---
 async def fetch_single_stock(http_client, symbol):
