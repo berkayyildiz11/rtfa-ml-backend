@@ -8,6 +8,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Haber sistemi importu (Önceki mesajda async yaptığımız dosya)
 from data.fetcher import run_news_pipeline
