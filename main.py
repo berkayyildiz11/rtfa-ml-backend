@@ -17,7 +17,7 @@ from data.fetcher import run_news_pipeline
 # Kendi bilgisayarında çalıştırırken bu kısımlara kendi gerçek şifreni yazabilirsin, 
 # ancak GitHub'a atarken .env kullanmayı unutma.
 MONGO_URI = os.getenv("MONGO_URI")
-FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
+FINNHUB_API_KEY2 = os.getenv("FINNHUB_API_KEY2")
 
 STOCKS = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "NFLX", "INTC", 
@@ -31,7 +31,7 @@ trades_col = db.sp500_datas2  # Time Series Collection
 # --- 2. BORSA WORKER FONKSİYONLARI ---
 async def fetch_single_stock(http_client, symbol):
     """Tek bir hissenin verisini Finnhub'dan çeker."""
-    url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
+    url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY2}"
     try:
         response = await http_client.get(url, timeout=5.0)
         data = response.json()
