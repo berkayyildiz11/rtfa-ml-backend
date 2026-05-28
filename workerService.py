@@ -16,7 +16,7 @@ STOCKS = [
 ]
 
 # --- VERİTABANI BAĞLANTISI ---
-client = AsyncIOMotorClient(MONGO_URI)
+client = AsyncIOMotorClient(MONGO_URI) #commit için ekledim
 db = client.stock_tracking_db
 trades_col = db.sp500deneme  # Time Series Collection olarak ayarlanmış koleksiyon
 
