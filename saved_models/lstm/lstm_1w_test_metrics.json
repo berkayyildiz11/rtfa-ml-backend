@@ -1,0 +1,24 @@
+{
+    "loss": 1.0918866383786103,
+    "accuracy": 0.4076923076923077,
+    "macro_f1": 0.3241728539056739,
+    "weighted_f1": 0.36214816973142516,
+    "classification_report": "              precision    recall  f1-score   support\n\n       worse       0.51      0.29      0.37       674\n     neutral       0.29      0.06      0.10       324\n      better       0.38      0.75      0.50       562\n\n    accuracy                           0.41      1560\n   macro avg       0.39      0.37      0.32      1560\nweighted avg       0.42      0.41      0.36      1560\n",
+    "confusion_matrix": [
+        [
+            198,
+            28,
+            448
+        ],
+        [
+            68,
+            19,
+            237
+        ],
+        [
+            125,
+            18,
+            419
+        ]
+    ]
+}
