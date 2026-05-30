@@ -2,6 +2,7 @@
 
 import os
 import asyncio
+import math
 import httpx
 from datetime import datetime, timezone, timedelta
 from contextlib import asynccontextmanager
@@ -20,6 +21,9 @@ MONGO_URI = os.environ.get("MONGO_URI")
 # İki anahtarı birbirinden tamamen bağımsız değişkenlere eşitleyelim
 STOCK_KEY = os.environ.get("FINNHUB_API_KEY2")
 NEWS_KEY = os.environ.get("FINNHUB_API_KEY")
+
+# Arka plan veri çekme işlemini açıp kapatmak için bir bayrak (Local testler için "false" yapın)
+ENABLE_POLLER = os.environ.get("ENABLE_POLLER", "false").lower() == "true"
 
 STOCKS = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "NFLX", "INTC", 
@@ -82,9 +86,12 @@ async def poll_stocks_every_50_seconds():
 # --- 3. FASTAPI YAŞAM DÖNGÜSÜ (LIFESPAN) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    worker_task = asyncio.create_task(poll_stocks_every_50_seconds())
+    worker_task = None
+    if ENABLE_POLLER:
+        worker_task = asyncio.create_task(poll_stocks_every_50_seconds())
     yield
-    worker_task.cancel()
+    if worker_task:
+        worker_task.cancel()
 
 # --- 4. FASTAPI UYGULAMASI VE CORS ---
 app = FastAPI(lifespan=lifespan)
@@ -147,3 +154,67 @@ async def get_latest_inserts(limit: int = 20):
         return {"status": "ok", "son_veriler": formatted_data}
     except Exception as e:
         return {"status": "error", "detay": str(e)}
+
+# --- 7. CHART VERİSİ ROTASI ---
+@app.get("/api/stocks/{ticker}/chart")
+async def get_stock_chart_data(ticker: str, period: str = Query("1m", description="Zaman aralığı: 1d, 1w, 1m, 3m, 1y, 2y, 3y")):
+    ticker = ticker.upper() # Küçük harfle istek gelirse düzelt (Örn: aapl -> AAPL)
+    now = datetime.now(timezone.utc)
+    
+    if period == "1d":
+        start_date = now - timedelta(days=1)
+    elif period == "1w":
+        start_date = now - timedelta(days=7)
+    elif period == "1m":
+        start_date = now - timedelta(days=30)
+    elif period == "3m":
+        start_date = now - timedelta(days=90)
+    elif period == "1y":
+        start_date = now - timedelta(days=365)
+    elif period == "2y":
+        start_date = now - timedelta(days=730)
+    elif period == "3y":
+        start_date = now - timedelta(days=1095)
+    else:
+        return {"status": "error", "message": "Geçersiz periyot"}
+
+    try:
+        # 1 günlük periyotta sadece anlık (intraday) verileri getir
+        if period == "1d":
+            query = {"symbol": ticker, "date": {"$gte": start_date}}
+        else:
+            # 1 günün üzerindeki periyotlarda geçmiş günlük verileri getir
+            query = {"ticker": ticker, "date": {"$gte": start_date}}
+            
+        # Bazı veritabanı versiyonlarında length=None hatası almamak için güvenli bir limit veriyoruz
+        cursor = trades_col.find(query).sort("date", 1)
+        results = await cursor.to_list(length=100000)
+        
+        # Eğer sp500_datas2 boş döndüyse ve geçmiş veri istiyorsak, historical_prices koleksiyonunu da kontrol et
+        if not results and period != "1d":
+            cursor = db.historical_prices.find(query).sort("date", 1)
+            results = await cursor.to_list(length=100000)
+        
+        formatted_data = []
+        for doc in results:
+            price = doc.get("close") if doc.get("close") is not None else doc.get("price")
+            # Eğer fiyat NaN (Not a Number) ise frontend'i çökertmemesi için atla
+            if price is not None and not math.isnan(price):
+                formatted_data.append({
+                    "date": doc["date"].isoformat() if hasattr(doc["date"], "isoformat") else doc["date"],
+                    "price": price
+                })
+
+        # Eğer periyot 1 günden büyükse, grafiğin sağ ucuna en son anlık fiyatı da (real-time) ekle
+        if period != "1d":
+            latest_realtime = await trades_col.find_one({"symbol": ticker}, sort=[("date", -1)])
+            if latest_realtime and latest_realtime.get("price") is not None:
+                if not math.isnan(latest_realtime["price"]):
+                    formatted_data.append({
+                        "date": latest_realtime["date"].isoformat() if hasattr(latest_realtime["date"], "isoformat") else latest_realtime["date"],
+                        "price": latest_realtime["price"]
+                    })
+            
+        return {"status": "success", "ticker": ticker, "period": period, "data": formatted_data}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

@@ -1,6 +1,10 @@
 import yfinance as yf
 import pandas as pd
 from pymongo import MongoClient
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def calculate_technical_indicators():
     # 1. Tarih Aralığı Belirleme (Bitiş tarihini yfinance dahil etsin diye 1 gün ileri alıyoruz)
@@ -56,7 +60,8 @@ def calculate_technical_indicators():
 
     # 3. MongoDB'ye Yeni Koleksiyon Olarak Yazma
     print("Hesaplamalar tamamlandı, MongoDB'ye yazılıyor...")
-    client = MongoClient("mongodb+srv://yorgahuseyin_db_user:212123@cluster0.qmrzavq.mongodb.net/?appName=Cluster0")
+    mongo_uri = os.environ.get("MONGO_URI")
+    client = MongoClient(mongo_uri)
     db = client["stock_tracking_db"]  # Kendi veritabanı adınla değiştir
     new_collection = db["sp500_datas"] # Yeni oluşturulacak koleksiyon
 

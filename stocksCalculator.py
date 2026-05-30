@@ -2,10 +2,14 @@ import pymongo
 import pandas as pd
 import numpy as np
 from pymongo import UpdateOne
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # 1. Database Connection Setup
 # Replace with your actual MongoDB connection string and database/collection names
-MONGO_URI = "mongodb+srv://yorgahuseyin_db_user:212123@cluster0.qmrzavq.mongodb.net/?appName=Cluster0"
+MONGO_URI = os.environ.get("MONGO_URI")
 DB_NAME = "stock_tracking_db"
 COLLECTION_NAME = "historical_prices"
 

@@ -2,10 +2,15 @@ import yfinance as yf
 from pymongo import MongoClient, UpdateOne
 import pandas as pd
 from datetime import datetime
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def update_mongodb_with_sp500():
     # 1. MongoDB Bağlantısı
-    client = MongoClient("mongodb+srv://yorgahuseyin_db_user:212123@cluster0.qmrzavq.mongodb.net/?appName=Cluster0")
+    mongo_uri = os.environ.get("MONGO_URI")
+    client = MongoClient(mongo_uri)
     db = client["stock_tracking_db"]
     collection = db["historical_prices"]
 

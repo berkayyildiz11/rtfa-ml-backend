@@ -3,11 +3,14 @@ import asyncio
 from datetime import datetime, timezone
 import httpx
 from motor.motor_asyncio import AsyncIOMotorClient
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- AYARLAR ---
 # Bu değerleri daha sonra Railway'de Environment Variables (Ortam Değişkenleri) kısmına ekleyeceğiz.
-MONGO_URI = os.environ.get("MONGO_URI", "mongodb+srv://yorgahuseyin_db_user:212123@cluster0.qmrzavq.mongodb.net/?appName=Cluster0")
-FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY", "d4mv7hhr01qsn6g8kgrgd4mv7hhr01qsn6g8kgs0")
+MONGO_URI = os.environ.get("MONGO_URI")
+FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY")
 
 # Takip edilecek 20 hisse senedi (Örnek listeyi kendi hisselerinle değiştir)
 STOCKS = [

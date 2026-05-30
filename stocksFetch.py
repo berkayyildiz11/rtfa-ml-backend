@@ -2,10 +2,13 @@ import yfinance as yf
 import pandas as pd
 from pymongo import MongoClient
 from datetime import datetime, timedelta
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # 2. MongoDB Bağlantı Bilgileri
-# BURAYI GÜNCELLE: <password> kısmına Atlas şifreni yaz
-MONGO_URI = "mongodb+srv://yorgahuseyin_db_user:212123@cluster0.qmrzavq.mongodb.net/?appName=Cluster0"
+MONGO_URI = os.environ.get("MONGO_URI")
 
 client = MongoClient(MONGO_URI)
 db = client["stock_tracking_db"]
