@@ -22,8 +22,8 @@ MONGO_URI = os.environ.get("MONGO_URI")
 STOCK_KEY = os.environ.get("FINNHUB_API_KEY2")
 NEWS_KEY = os.environ.get("FINNHUB_API_KEY")
 
-# Arka plan veri çekme işlemini açıp kapatmak için bir bayrak (Local testler için "false" yapın)
-ENABLE_POLLER = os.environ.get("ENABLE_POLLER", "false").lower() == "true"
+# Arka plan veri çekme işlemini açıp kapatmak için bir bayrak (Deploy için varsayılanı "true" yaptık) (Local testler için "false" yapın) ("ENABLE_POLLER" bunu yanındaki değeri.)
+ENABLE_POLLER = os.environ.get("ENABLE_POLLER", "true").lower() == "true"
 
 STOCKS = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "NFLX", "INTC", 
