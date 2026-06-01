@@ -6,7 +6,8 @@ from datetime import datetime, timedelta, timezone
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 
-from src.utils.news_filters import is_article_relevant
+from src.models.nlp_sentiment import FinBERTSentiment
+from src.utils.news_filters import analyze_article_relevance
 
 load_dotenv()
 
@@ -35,18 +36,38 @@ async def fetch_daily_news(client: httpx.AsyncClient, ticker: str, lookback_days
     }
 
     # 2. İstek asenkron olarak (await) atılıyor
-    response = await client.get(BASE_URL, params=params)
-
-    if response.status_code == 200:
+    try:
+        response = await client.get(BASE_URL, params=params, timeout=10.0)
+        response.raise_for_status()
         return response.json()
-    else:
-        print(f"Error Fetching {ticker}: {response.status_code}")
-        return []
+    except httpx.HTTPStatusError as exc:
+        print(f"Error Fetching {ticker}: {exc.response.status_code}")
+    except httpx.HTTPError as exc:
+        print(f"Error Fetching {ticker}: {exc}")
+
+    return []
+
+
+def _format_timestamp(raw_timestamp) -> str | None:
+    if raw_timestamp is None:
+        return None
+
+    try:
+        return datetime.fromtimestamp(raw_timestamp, tz=timezone.utc).isoformat()
+    except (OSError, TypeError, ValueError):
+        return None
+
+
+def _news_key(item: dict) -> str:
+    return f"{item['url']}-{item['timestamp']}-{item['ticker']}"
+
 
 # 3. Ana pipeline fonksiyonu async yapıldı
-async def run_news_pipeline():
+async def run_news_pipeline(max_items: int | None = None):
     all_news_data = []
+    seen_news_keys = set()
     print("Starting News Fetch Pipeline...")
+    sentiment_analyzer = FinBERTSentiment()
 
     # 4. Client oturumu döngünün DIŞINDA açılıyor (Çok ciddi performans artışı sağlar)
     async with httpx.AsyncClient() as client:
@@ -61,19 +82,42 @@ async def run_news_pipeline():
                 continue
 
             for item in news_items:
-                headline = item['headline']
-                summary = item['summary']
+                headline = item.get("headline") or ""
+                summary = item.get("summary") or ""
+                timestamp = _format_timestamp(item.get("datetime"))
 
-                if is_article_relevant(ticker, headline, summary):
-                    clean_item = {
-                        "ticker": ticker,
-                        "timestamp": datetime.fromtimestamp(item['datetime'], tz=timezone.utc).isoformat(),
-                        "headline": headline,
-                        "summary": summary,
-                        "source": item['source'],
-                        "url": item['url']
-                    }
-                    all_news_data.append(clean_item)
+                if not headline or not timestamp:
+                    continue
+
+                relevance = analyze_article_relevance(ticker, headline, summary)
+                if not relevance["is_relevant"]:
+                    continue
+
+                sentiment = sentiment_analyzer.analyze_article(headline, summary)
+                clean_item = {
+                    "ticker": ticker,
+                    "timestamp": timestamp,
+                    "headline": headline,
+                    "summary": summary,
+                    "source": item.get("source", ""),
+                    "url": item.get("url", ""),
+                    **sentiment,
+                    "relevance_score": relevance["relevance_score"],
+                    "relevance_reason": relevance["relevance_reason"],
+                    "matched_aliases": relevance["matched_aliases"],
+                }
+                unique_key = _news_key(clean_item)
+                if unique_key in seen_news_keys:
+                    continue
+
+                seen_news_keys.add(unique_key)
+                all_news_data.append(clean_item)
+
+                if max_items is not None and len(all_news_data) >= max_items:
+                    break
+
+            if max_items is not None and len(all_news_data) >= max_items:
+                break
 
             # 6. KRİTİK DEĞİŞİKLİK: Sunucuyu donduran time.sleep() yerine asenkron bekleme
             await asyncio.sleep(1)
@@ -86,7 +130,7 @@ async def run_news_pipeline():
         unique_news = {}
 
         for item in all_news_data:
-            unique_key = f"{item['url']}-{item['timestamp']}-{item['ticker']}"
+            unique_key = _news_key(item)
 
             if unique_key not in unique_news:
                 unique_news[unique_key] = item

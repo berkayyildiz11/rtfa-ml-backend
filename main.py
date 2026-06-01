@@ -5,6 +5,7 @@ import asyncio
 import math
 import httpx
 from datetime import datetime, timezone, timedelta
+from typing import Literal
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Query
@@ -115,19 +116,24 @@ NEWS_CACHE = {
 from data.fetcher import run_news_pipeline
 
 @app.get("/api/news")
-async def get_latest_news(page: int = 1, limit: int = 10):
+async def get_latest_news(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1),
+):
     now = datetime.now(timezone.utc)
+    requested_items = page * limit
 
     cache_expired = (
         NEWS_CACHE["last_updated"] is None or
         now - NEWS_CACHE["last_updated"] > timedelta(minutes=30)
     )
+    cache_missing_requested_page = len(NEWS_CACHE["data"]) < requested_items
 
-    if cache_expired:
+    if cache_expired or cache_missing_requested_page:
         # Eğer fetcher.py içinde run_news_pipeline fonksiyonunu güncelleyebiliyorsan 
         # ona da NEWS_KEY'i parametre olarak paslayabilirsin. 
         # Güncelleyemiyorsan bu şekilde çağır, o zaten os.getenv("FINNHUB_NEWS_API_KEY") okuyor.
-        NEWS_CACHE["data"] = await run_news_pipeline()
+        NEWS_CACHE["data"] = await run_news_pipeline(max_items=requested_items)
         NEWS_CACHE["last_updated"] = now
 
     news_data = NEWS_CACHE["data"]
@@ -218,3 +224,11 @@ async def get_stock_chart_data(ticker: str, period: str = Query("1m", descriptio
         return {"status": "success", "ticker": ticker, "period": period, "data": formatted_data}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+    
+
+@app.get("/api/predict/{ticker}")
+async def predict_stock_price(
+    ticker: str,
+    period: Literal["1d", "1w", "1m", "3m", "6m"] = "1m"
+):
+    return {"status": "error", "message": "Bu özellik henüz geliştirilme aşamasında."}
