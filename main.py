@@ -92,11 +92,18 @@ async def poll_stocks_every_50_seconds():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     worker_task = None
+    news_task = None
     if ENABLE_POLLER:
         worker_task = asyncio.create_task(poll_stocks_every_50_seconds())
+    warm_news_cache_from_disk()
+    news_task = asyncio.create_task(refresh_news_every_hour())
     yield
     if worker_task:
         worker_task.cancel()
+    if news_task:
+        news_task.cancel()
+    if NEWS_REFRESH_TASK:
+        NEWS_REFRESH_TASK.cancel()
 
 # --- 4. FASTAPI UYGULAMASI VE CORS ---
 app = FastAPI(lifespan=lifespan)
@@ -116,7 +123,9 @@ NEWS_CACHE = {
     "last_updated": None
 }
 NEWS_CACHE_TARGET_ITEMS = 80
-NEWS_CACHE_TTL = timedelta(minutes=30)
+NEWS_REFRESH_INTERVAL_SECONDS = int(os.environ.get("NEWS_REFRESH_INTERVAL_SECONDS", "3600"))
+NEWS_LOOKBACK_DAYS = int(os.environ.get("NEWS_LOOKBACK_DAYS", "7"))
+NEWS_CACHE_TTL = timedelta(seconds=NEWS_REFRESH_INTERVAL_SECONDS)
 NEWS_STORAGE_PATH = Path("data/local_storage/latest_news.json")
 NEWS_REFRESH_TASK = None
 
@@ -137,11 +146,21 @@ def load_news_from_disk() -> list[dict]:
     return data if isinstance(data, list) else []
 
 
+def warm_news_cache_from_disk():
+    disk_news = load_news_from_disk()
+    if disk_news:
+        NEWS_CACHE["data"] = disk_news
+        NEWS_CACHE["last_updated"] = datetime.now(timezone.utc)
+
+
 async def refresh_news_cache():
     global NEWS_REFRESH_TASK
 
     try:
-        NEWS_CACHE["data"] = await run_news_pipeline(max_items=NEWS_CACHE_TARGET_ITEMS)
+        NEWS_CACHE["data"] = await run_news_pipeline(
+            max_items=NEWS_CACHE_TARGET_ITEMS,
+            lookback_days=NEWS_LOOKBACK_DAYS,
+        )
         NEWS_CACHE["last_updated"] = datetime.now(timezone.utc)
     finally:
         NEWS_REFRESH_TASK = None
@@ -152,6 +171,12 @@ def ensure_news_refresh_started():
 
     if NEWS_REFRESH_TASK is None or NEWS_REFRESH_TASK.done():
         NEWS_REFRESH_TASK = asyncio.create_task(refresh_news_cache())
+
+
+async def refresh_news_every_hour():
+    while True:
+        ensure_news_refresh_started()
+        await asyncio.sleep(NEWS_REFRESH_INTERVAL_SECONDS)
 
 @app.get("/api/news")
 async def get_latest_news(

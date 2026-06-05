@@ -60,6 +60,19 @@ class NewsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response["total"], 0)
         self.assertEqual(response["data"], [])
 
+    async def test_refresh_news_cache_uses_hourly_batch_settings(self):
+        items = make_news_items(30)
+
+        with patch.object(main, "run_news_pipeline", AsyncMock(return_value=items)) as fetcher:
+            await main.refresh_news_cache()
+
+        fetcher.assert_awaited_once_with(
+            max_items=main.NEWS_CACHE_TARGET_ITEMS,
+            lookback_days=main.NEWS_LOOKBACK_DAYS,
+        )
+        self.assertEqual(main.NEWS_CACHE["data"], items)
+        self.assertIsNotNone(main.NEWS_CACHE["last_updated"])
+
 
 if __name__ == "__main__":
     unittest.main()

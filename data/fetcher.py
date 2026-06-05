@@ -23,6 +23,7 @@ TICKERS = [
 ]
 
 DEFAULT_MAX_ITEMS = 80
+DEFAULT_LOOKBACK_DAYS = 7
 MAX_CONCURRENT_NEWS_REQUESTS = 5
 
 # 1. async def yapıldı ve dışarıdan 'client' parametresi alacak şekilde güncellendi
@@ -66,7 +67,10 @@ def _news_key(item: dict) -> str:
 
 
 # 3. Ana pipeline fonksiyonu async yapıldı
-async def run_news_pipeline(max_items: int | None = None):
+async def run_news_pipeline(
+    max_items: int | None = None,
+    lookback_days: int = DEFAULT_LOOKBACK_DAYS,
+):
     max_items = DEFAULT_MAX_ITEMS if max_items is None else max_items
     all_news_data = []
     seen_news_keys = set()
@@ -78,7 +82,7 @@ async def run_news_pipeline(max_items: int | None = None):
     async def fetch_for_ticker(ticker: str):
         async with semaphore:
             print(f"Fetching news for {ticker}...")
-            news_items = await fetch_daily_news(client, ticker, lookback_days=1)
+            news_items = await fetch_daily_news(client, ticker, lookback_days=lookback_days)
             return ticker, news_items
 
     async with httpx.AsyncClient() as client:
