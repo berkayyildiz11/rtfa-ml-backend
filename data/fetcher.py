@@ -22,6 +22,9 @@ TICKERS = [
     "COST", "TMUS", "AMGN", "SBUX", "ISRG"
 ]
 
+DEFAULT_MAX_ITEMS = 80
+MAX_CONCURRENT_NEWS_REQUESTS = 5
+
 # 1. async def yapıldı ve dışarıdan 'client' parametresi alacak şekilde güncellendi
 async def fetch_daily_news(client: httpx.AsyncClient, ticker: str, lookback_days: int = 1) -> list:
     
@@ -64,20 +67,26 @@ def _news_key(item: dict) -> str:
 
 # 3. Ana pipeline fonksiyonu async yapıldı
 async def run_news_pipeline(max_items: int | None = None):
+    max_items = DEFAULT_MAX_ITEMS if max_items is None else max_items
     all_news_data = []
     seen_news_keys = set()
     print("Starting News Fetch Pipeline...")
     sentiment_analyzer = FinBERTSentiment()
 
-    # 4. Client oturumu döngünün DIŞINDA açılıyor (Çok ciddi performans artışı sağlar)
-    async with httpx.AsyncClient() as client:
-        for ticker in TICKERS:
-            print(f"Fetching news for {ticker}...")
-            
-            # 5. Alt fonksiyonu await ile bekliyoruz
-            news_items = await fetch_daily_news(client, ticker, lookback_days=1)
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_NEWS_REQUESTS)
 
-            # API'den boş dönme ihtimaline karşı güvenlik kontrolü
+    async def fetch_for_ticker(ticker: str):
+        async with semaphore:
+            print(f"Fetching news for {ticker}...")
+            news_items = await fetch_daily_news(client, ticker, lookback_days=1)
+            return ticker, news_items
+
+    async with httpx.AsyncClient() as client:
+        fetch_results = await asyncio.gather(
+            *(fetch_for_ticker(ticker) for ticker in TICKERS)
+        )
+
+        for ticker, news_items in fetch_results:
             if not news_items:
                 continue
 
@@ -118,9 +127,6 @@ async def run_news_pipeline(max_items: int | None = None):
 
             if max_items is not None and len(all_news_data) >= max_items:
                 break
-
-            # 6. KRİTİK DEĞİŞİKLİK: Sunucuyu donduran time.sleep() yerine asenkron bekleme
-            await asyncio.sleep(1)
 
     print(f"\nPipeline complete. Fetched and verified {len(all_news_data)} highly relevant articles.")
 

@@ -115,6 +115,8 @@ NEWS_CACHE = {
     "data": [],
     "last_updated": None
 }
+NEWS_CACHE_TARGET_ITEMS = 80
+NEWS_CACHE_TTL = timedelta(minutes=30)
 
 # Haber fetcher importunu fonksiyonun hemen üzerinde yapalım ki iç içe geçmesin
 from data.fetcher import run_news_pipeline
@@ -125,19 +127,14 @@ async def get_latest_news(
     limit: int = Query(10, ge=1),
 ):
     now = datetime.now(timezone.utc)
-    requested_items = page * limit
 
     cache_expired = (
         NEWS_CACHE["last_updated"] is None or
-        now - NEWS_CACHE["last_updated"] > timedelta(minutes=30)
+        now - NEWS_CACHE["last_updated"] > NEWS_CACHE_TTL
     )
-    cache_missing_requested_page = len(NEWS_CACHE["data"]) < requested_items
 
-    if cache_expired or cache_missing_requested_page:
-        # Eğer fetcher.py içinde run_news_pipeline fonksiyonunu güncelleyebiliyorsan 
-        # ona da NEWS_KEY'i parametre olarak paslayabilirsin. 
-        # Güncelleyemiyorsan bu şekilde çağır, o zaten os.getenv("FINNHUB_NEWS_API_KEY") okuyor.
-        NEWS_CACHE["data"] = await run_news_pipeline(max_items=requested_items)
+    if cache_expired or not NEWS_CACHE["data"]:
+        NEWS_CACHE["data"] = await run_news_pipeline(max_items=NEWS_CACHE_TARGET_ITEMS)
         NEWS_CACHE["last_updated"] = now
 
     news_data = NEWS_CACHE["data"]
