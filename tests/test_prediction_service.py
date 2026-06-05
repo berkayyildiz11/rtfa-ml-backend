@@ -1,8 +1,13 @@
 from datetime import datetime, timedelta, timezone
 import json
 import unittest
+from unittest.mock import patch
 
-from src.services.prediction_service import build_prediction_response, prepare_price_frame
+from src.services.prediction_service import (
+    build_prediction_response,
+    build_recent_sentiment_signal,
+    prepare_price_frame,
+)
 
 
 def make_history(now: datetime, rows: int = 80) -> list[dict]:
@@ -46,6 +51,7 @@ class PredictionServiceTests(unittest.TestCase):
             ],
             explain=True,
             now=now,
+            use_finbert_for_prediction=False,
         )
 
         serialized = json.dumps(response).lower()
@@ -77,6 +83,7 @@ class PredictionServiceTests(unittest.TestCase):
             historical_prices=make_history(now),
             explain=False,
             now=now,
+            use_finbert_for_prediction=False,
         )
 
         self.assertEqual(response["status"], "success")
@@ -93,6 +100,7 @@ class PredictionServiceTests(unittest.TestCase):
             period="1m",
             historical_prices=make_history(now),
             now=now,
+            use_finbert_for_prediction=False,
         )
 
         self.assertIn("explanation", response)
@@ -115,6 +123,7 @@ class PredictionServiceTests(unittest.TestCase):
             ],
             explain=True,
             now=now,
+            use_finbert_for_prediction=False,
         )
 
         self.assertFalse(response["signals"]["recent_news_sentiment"]["used_for_period"])
@@ -122,6 +131,63 @@ class PredictionServiceTests(unittest.TestCase):
             response["explanation"]["contributions"]["recent_news_sentiment"],
             0.0,
         )
+
+    def test_short_horizon_prediction_sentiment_uses_finbert_when_enabled(self):
+        now = datetime(2026, 6, 5, tzinfo=timezone.utc)
+
+        class FakeAnalyzer:
+            def analyze_article(self, headline, summary):
+                return {
+                    "sentiment_score": 0.7,
+                    "sentiment_label": "positive",
+                    "sentiment_confidence": 0.8,
+                }
+
+        with patch(
+            "src.services.prediction_service.get_finbert_analyzer",
+            return_value=FakeAnalyzer(),
+        ):
+            signal = build_recent_sentiment_signal(
+                ticker="AAPL",
+                period="1w",
+                news_items=[
+                    {
+                        "ticker": "AAPL",
+                        "timestamp": now.isoformat(),
+                        "headline": "Apple beats earnings expectations",
+                        "summary": "Analysts raised targets.",
+                        "relevance_score": 0.9,
+                    }
+                ],
+                now=now,
+                use_finbert=True,
+            )
+
+        self.assertEqual(signal["source"], "finbert_prediction_sentiment")
+        self.assertEqual(signal["direction"], "positive")
+        self.assertAlmostEqual(signal["score"], 0.7)
+        self.assertAlmostEqual(signal["confidence"], 0.8)
+
+    def test_prediction_sentiment_can_use_cached_lightweight_scores(self):
+        now = datetime(2026, 6, 5, tzinfo=timezone.utc)
+        signal = build_recent_sentiment_signal(
+            ticker="AAPL",
+            period="1w",
+            news_items=[
+                {
+                    "ticker": "AAPL",
+                    "timestamp": now.isoformat(),
+                    "sentiment_score": -0.6,
+                    "sentiment_confidence": 0.75,
+                    "relevance_score": 1.0,
+                }
+            ],
+            now=now,
+            use_finbert=False,
+        )
+
+        self.assertEqual(signal["source"], "cached_news_sentiment")
+        self.assertEqual(signal["direction"], "negative")
 
     def test_prepare_price_frame_appends_latest_realtime_price(self):
         now = datetime(2026, 6, 5, tzinfo=timezone.utc)

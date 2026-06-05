@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import math
+import os
 from typing import Literal
 
 import numpy as np
@@ -34,6 +35,10 @@ RETURN_THRESHOLDS: dict[PredictionPeriod, float] = {
 
 SHORT_SENTIMENT_PERIODS = {"1d", "1w"}
 MIN_PRICE_ROWS = 40
+USE_FINBERT_FOR_PREDICTION = os.getenv("USE_FINBERT_FOR_PREDICTION", "true").lower() == "true"
+MAX_PREDICTION_SENTIMENT_ARTICLES = int(os.getenv("MAX_PREDICTION_SENTIMENT_ARTICLES", "5"))
+
+_FINBERT_ANALYZER = None
 
 
 def build_prediction_response(
@@ -47,6 +52,7 @@ def build_prediction_response(
     explain: bool = True,
     now: datetime | None = None,
     adjustor: WeightAdjustor | None = None,
+    use_finbert_for_prediction: bool = USE_FINBERT_FOR_PREDICTION,
 ) -> dict[str, object]:
     ticker = ticker.upper()
     now = now or datetime.now(timezone.utc)
@@ -72,6 +78,7 @@ def build_prediction_response(
         period=period,
         news_items=news_items or [],
         now=now,
+        use_finbert=use_finbert_for_prediction,
     )
 
     kwargs = {
@@ -248,6 +255,7 @@ def build_recent_sentiment_signal(
     period: PredictionPeriod,
     news_items: list[dict],
     now: datetime,
+    use_finbert: bool = USE_FINBERT_FOR_PREDICTION,
 ) -> dict[str, object]:
     if period not in SHORT_SENTIMENT_PERIODS:
         return {
@@ -283,6 +291,56 @@ def build_recent_sentiment_signal(
             "source": "no_recent_news",
         }
 
+    if use_finbert:
+        return build_finbert_prediction_sentiment_signal(matching_items)
+
+    return build_cached_sentiment_signal(matching_items)
+
+
+def build_finbert_prediction_sentiment_signal(
+    matching_items: list[dict],
+) -> dict[str, object]:
+    analyzer = get_finbert_analyzer()
+    selected_items = sorted(
+        matching_items,
+        key=lambda item: _parse_datetime(item.get("timestamp")) or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )[:MAX_PREDICTION_SENTIMENT_ARTICLES]
+
+    weighted_scores = []
+    total_weight = 0.0
+    confidences = []
+    relevances = []
+    for item in selected_items:
+        analysis = analyzer.analyze_article(
+            item.get("headline", "") or "",
+            item.get("summary", "") or "",
+        )
+        score = float(analysis.get("sentiment_score", 0.0) or 0.0)
+        confidence = float(analysis.get("sentiment_confidence", 0.0) or 0.0)
+        relevance = float(item.get("relevance_score", 1.0) or 1.0)
+        weight = max(0.0, confidence) * max(0.0, relevance)
+
+        weighted_scores.append(score * weight)
+        total_weight += weight
+        confidences.append(confidence)
+        relevances.append(relevance)
+
+    aggregate_score = sum(weighted_scores) / total_weight if total_weight > 0 else 0.0
+    aggregate_score = max(-1.0, min(1.0, aggregate_score))
+
+    return {
+        "score": round(aggregate_score, 4),
+        "direction": sentiment_direction(aggregate_score),
+        "confidence": round(float(np.mean(confidences)), 4) if confidences else None,
+        "relevance": round(float(np.mean(relevances)), 4) if relevances else None,
+        "news_count": len(selected_items),
+        "used_for_period": True,
+        "source": "finbert_prediction_sentiment",
+    }
+
+
+def build_cached_sentiment_signal(matching_items: list[dict]) -> dict[str, object]:
     weighted_scores = []
     total_weight = 0.0
     confidences = []
@@ -308,8 +366,18 @@ def build_recent_sentiment_signal(
         "relevance": round(float(np.mean(relevances)), 4) if relevances else None,
         "news_count": len(matching_items),
         "used_for_period": True,
-        "source": "recent_news_sentiment",
+        "source": "cached_news_sentiment",
     }
+
+
+def get_finbert_analyzer():
+    global _FINBERT_ANALYZER
+
+    if _FINBERT_ANALYZER is None:
+        from src.models.nlp_sentiment import FinBERTSentiment
+
+        _FINBERT_ANALYZER = FinBERTSentiment()
+    return _FINBERT_ANALYZER
 
 
 def classify_relative_return(relative_return: float, threshold: float) -> str:
