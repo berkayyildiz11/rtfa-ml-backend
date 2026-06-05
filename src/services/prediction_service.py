@@ -87,7 +87,9 @@ def build_prediction_response(
     }
 
     result = adjustor.explain_prediction(**kwargs)
-    if not explain:
+    if explain:
+        result["explanatory_text"] = build_explanatory_text(result["explanation"])
+    else:
         result.pop("explanation", None)
 
     return {
@@ -104,6 +106,20 @@ def build_prediction_response(
         },
         **result,
     }
+
+
+def build_explanatory_text(explanation: dict[str, object]) -> str:
+    summary = str(explanation.get("summary", "")).strip()
+    details = [
+        str(detail).strip()
+        for detail in explanation.get("decision_details", [])
+        if str(detail).strip()
+    ]
+
+    if not details:
+        return summary
+
+    return " ".join([summary, *details]).strip()
 
 
 def prepare_price_frame(

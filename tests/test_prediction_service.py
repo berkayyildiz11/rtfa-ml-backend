@@ -53,6 +53,9 @@ class PredictionServiceTests(unittest.TestCase):
         self.assertEqual(response["status"], "success")
         self.assertEqual(response["ticker"], "AAPL")
         self.assertIn("explanation", response)
+        self.assertIn("explanatory_text", response)
+        self.assertIsInstance(response["explanatory_text"], str)
+        self.assertGreater(len(response["explanatory_text"]), 0)
         self.assertIn("confidence", response["prediction"])
         self.assertIn("recent_market_pattern", response["weights"])
         self.assertIn("time_series_forecast", response["weights"])
@@ -78,6 +81,7 @@ class PredictionServiceTests(unittest.TestCase):
 
         self.assertEqual(response["status"], "success")
         self.assertNotIn("explanation", response)
+        self.assertNotIn("explanatory_text", response)
         self.assertIn("prediction", response)
         self.assertIn("weights", response)
         self.assertIn("signals", response)
@@ -92,6 +96,7 @@ class PredictionServiceTests(unittest.TestCase):
         )
 
         self.assertIn("explanation", response)
+        self.assertIn("explanatory_text", response)
 
     def test_long_horizon_sentiment_is_not_used(self):
         now = datetime(2026, 6, 5, tzinfo=timezone.utc)
