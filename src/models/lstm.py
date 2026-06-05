@@ -1,6 +1,7 @@
 from pathlib import Path
 import copy
 import json
+import random
 
 import pandas as pd
 import numpy as np
@@ -14,12 +15,22 @@ from torch.utils.data import Dataset, DataLoader
 
 from src.data.mongodb_loader import load_stock_data, load_sp500_data
 
+SEED = 777
 
-WINDOW_SIZE = 30
-BATCH_SIZE = 32
-EPOCHS = 30
-LR = 3e-4
-EARLY_STOPPING_PATIENCE = 10
+random.seed(SEED)
+np.random.seed(SEED)
+
+torch.manual_seed(SEED)
+
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(SEED)
+
+
+WINDOW_SIZE = 126
+BATCH_SIZE = 16
+EPOCHS = 50
+LR = 5e-4
+EARLY_STOPPING_PATIENCE = 8
 
 NEUTRAL_THRESHOLD = 0.03
 NUM_CLASSES = 3
@@ -40,6 +51,7 @@ HORIZON_CONFIGS = {
     "1m": 21,
     "3m": 63,
     "6m": 126,
+    "1y": 252,
 }
 
 
@@ -118,6 +130,50 @@ def scale_features(train_df, val_df, test_df):
 
 
 class RelativeReturnClassificationDataset(Dataset):
+    def __init__(self, df: pd.DataFrame, allowed_dates, window_size: int = 30):
+        self.X = []
+        self.y = []
+
+        allowed_dates = set(pd.to_datetime(allowed_dates))
+
+        for _, group in df.groupby("ticker"):
+            group = group.sort_values("date").reset_index(drop=True)
+
+            features = group[FEATURE_COLUMNS].values.astype(np.float32)
+            targets = group[TARGET_CLASS_COLUMN].values.astype(np.int64)
+            dates = pd.to_datetime(group["date"]).values
+
+            for i in range(len(group) - window_size):
+                target_idx = i + window_size - 1
+                target_date = pd.to_datetime(dates[target_idx])
+
+                if target_date in allowed_dates:
+                    self.X.append(features[i:i + window_size])
+                    self.y.append(targets[target_idx])
+
+        self.X = torch.tensor(np.array(self.X), dtype=torch.float32)
+        self.y = torch.tensor(np.array(self.y), dtype=torch.long)
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        return self.X[idx], self.y[idx]
+
+def get_split_dates(df: pd.DataFrame):
+    dates = sorted(df["date"].unique())
+
+    train_end = int(len(dates) * 0.7)
+    val_end = int(len(dates) * 0.85)
+
+    train_dates = dates[:train_end]
+    val_dates = dates[train_end:val_end]
+    test_dates = dates[val_end:]
+
+    return train_dates, val_dates, test_dates
+
+"""
+class RelativeReturnClassificationDataset(Dataset):
     def __init__(self, df: pd.DataFrame, window_size: int = 30):
         self.X = []
         self.y = []
@@ -140,10 +196,10 @@ class RelativeReturnClassificationDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.X[idx], self.y[idx]
-
+"""
 
 class LSTMRelativeReturnClassifier(nn.Module):
-    def __init__(self, input_size, hidden_size=64, num_layers=1, dropout=0.1):
+    def __init__(self, input_size, hidden_size=64, num_layers=1, dropout=0.4):
         super().__init__()
 
         self.lstm = nn.LSTM(
@@ -258,8 +314,8 @@ def save_metrics(metrics, save_path):
 
 
 def run_lstm_relative(
-    horizon_name="1w",
-    forecast_horizon=5,
+    horizon_name="1y",
+    forecast_horizon=252,
     stock_csv_path=None,
     sp500_csv_path=None,
 ):
@@ -272,12 +328,25 @@ def run_lstm_relative(
 
     df = prepare_dataframe(stock_df, sp500_df, forecast_horizon)
     
-    train_df, val_df, test_df = chronological_split(df)
+    """train_df, val_df, test_df = chronological_split(df)
     train_df, val_df, test_df, scaler = scale_features(train_df, val_df, test_df)
 
     train_dataset = RelativeReturnClassificationDataset(train_df, WINDOW_SIZE)
     val_dataset = RelativeReturnClassificationDataset(val_df, WINDOW_SIZE)
-    test_dataset = RelativeReturnClassificationDataset(test_df, WINDOW_SIZE)
+    test_dataset = RelativeReturnClassificationDataset(test_df, WINDOW_SIZE)"""
+
+    train_dates, val_dates, test_dates = get_split_dates(df)
+
+    train_df = df[df["date"].isin(train_dates)].copy()
+
+    scaler = StandardScaler()
+    scaler.fit(train_df[FEATURE_COLUMNS])
+
+    df[FEATURE_COLUMNS] = scaler.transform(df[FEATURE_COLUMNS])
+
+    train_dataset = RelativeReturnClassificationDataset(df, train_dates, WINDOW_SIZE)
+    val_dataset = RelativeReturnClassificationDataset(df, val_dates, WINDOW_SIZE)
+    test_dataset = RelativeReturnClassificationDataset(df, test_dates, WINDOW_SIZE)
 
     print_class_distribution_from_dataset(train_dataset, "Train")
     print_class_distribution_from_dataset(val_dataset, "Validation")
@@ -303,7 +372,7 @@ def run_lstm_relative(
         input_size=len(FEATURE_COLUMNS),
         hidden_size=64,
         num_layers=1,
-        dropout=0.1,
+        dropout=0.4,
     ).to(device)
 
     class_weights = torch.tensor([1.0, 1.2, 1.0], dtype=torch.float32).to(device)
@@ -380,6 +449,6 @@ def run_lstm_relative(
 
 if __name__ == "__main__":
     run_lstm_relative(
-        horizon_name="6m",
-        forecast_horizon=HORIZON_CONFIGS["6m"],
+        horizon_name="1y",
+        forecast_horizon=HORIZON_CONFIGS["1y"],
     )

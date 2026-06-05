@@ -226,9 +226,9 @@ async def get_stock_chart_data(ticker: str, period: str = Query("1m", descriptio
         return {"status": "error", "message": str(e)}
     
 
-@app.get("/api/predict/{ticker}")
+@app.get("/api/predict/{ticker}?period={period}")
 async def predict_stock_price(
     ticker: str,
-    period: Literal["1d", "1w", "1m", "3m", "6m"] = "1m"
+    period: Literal["1d", "1w", "1m", "3m", "6m", "1y"] = "1m"
 ):
     return {"status": "error", "message": "Bu özellik henüz geliştirilme aşamasında."}

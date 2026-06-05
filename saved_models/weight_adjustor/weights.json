@@ -1,0 +1,83 @@
+{
+    "created_at": "2026-06-03T13:40:16.520782+00:00",
+    "objective": "macro_f1",
+    "prediction_source": "price_history_proxy_signals",
+    "sentiment_calibrated": false,
+    "sentiment_note": "Historical sentiment is not available; sentiment remains a runtime overlay for 1d and 1w.",
+    "weights": {
+        "1d": {
+            "lstm": 0.2,
+            "timesfm": 0.8,
+            "sentiment": 0.0
+        },
+        "1w": {
+            "lstm": 0.35,
+            "timesfm": 0.65,
+            "sentiment": 0.0
+        },
+        "1m": {
+            "lstm": 1.0,
+            "timesfm": 0.0,
+            "sentiment": 0.0
+        },
+        "3m": {
+            "lstm": 1.0,
+            "timesfm": 0.0,
+            "sentiment": 0.0
+        },
+        "6m": {
+            "lstm": 0.0,
+            "timesfm": 1.0,
+            "sentiment": 0.0
+        },
+        "1y": {
+            "lstm": 0.65,
+            "timesfm": 0.35,
+            "sentiment": 0.0
+        }
+    },
+    "periods": {
+        "1d": {
+            "horizon_days": 1,
+            "macro_f1": 0.325695,
+            "candidate_count": 21,
+            "sample_count": 14300,
+            "timesfm_note": null
+        },
+        "1w": {
+            "horizon_days": 5,
+            "macro_f1": 0.349908,
+            "candidate_count": 21,
+            "sample_count": 14220,
+            "timesfm_note": null
+        },
+        "1m": {
+            "horizon_days": 21,
+            "macro_f1": 0.345819,
+            "candidate_count": 21,
+            "sample_count": 13900,
+            "timesfm_note": null
+        },
+        "3m": {
+            "horizon_days": 63,
+            "macro_f1": 0.363931,
+            "candidate_count": 21,
+            "sample_count": 13060,
+            "timesfm_note": null
+        },
+        "6m": {
+            "horizon_days": 126,
+            "macro_f1": 0.360882,
+            "candidate_count": 21,
+            "sample_count": 11800,
+            "timesfm_note": null
+        },
+        "1y": {
+            "horizon_days": 252,
+            "macro_f1": 0.319909,
+            "candidate_count": 21,
+            "sample_count": 9280,
+            "timesfm_note": "TimesFM 1y historical calibration is treated as limited because the current project does not store full historical TimesFM prediction series."
+        }
+    }
+}
