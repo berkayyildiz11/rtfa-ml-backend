@@ -117,9 +117,41 @@ NEWS_CACHE = {
 }
 NEWS_CACHE_TARGET_ITEMS = 80
 NEWS_CACHE_TTL = timedelta(minutes=30)
+NEWS_STORAGE_PATH = Path("data/local_storage/latest_news.json")
+NEWS_REFRESH_TASK = None
 
 # Haber fetcher importunu fonksiyonun hemen üzerinde yapalım ki iç içe geçmesin
 from data.fetcher import run_news_pipeline
+
+
+def load_news_from_disk() -> list[dict]:
+    if not NEWS_STORAGE_PATH.exists():
+        return []
+
+    try:
+        with NEWS_STORAGE_PATH.open() as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    return data if isinstance(data, list) else []
+
+
+async def refresh_news_cache():
+    global NEWS_REFRESH_TASK
+
+    try:
+        NEWS_CACHE["data"] = await run_news_pipeline(max_items=NEWS_CACHE_TARGET_ITEMS)
+        NEWS_CACHE["last_updated"] = datetime.now(timezone.utc)
+    finally:
+        NEWS_REFRESH_TASK = None
+
+
+def ensure_news_refresh_started():
+    global NEWS_REFRESH_TASK
+
+    if NEWS_REFRESH_TASK is None or NEWS_REFRESH_TASK.done():
+        NEWS_REFRESH_TASK = asyncio.create_task(refresh_news_cache())
 
 @app.get("/api/news")
 async def get_latest_news(
@@ -133,8 +165,17 @@ async def get_latest_news(
         now - NEWS_CACHE["last_updated"] > NEWS_CACHE_TTL
     )
 
-    if cache_expired or not NEWS_CACHE["data"]:
-        NEWS_CACHE["data"] = await run_news_pipeline(max_items=NEWS_CACHE_TARGET_ITEMS)
+    if not NEWS_CACHE["data"]:
+        disk_news = load_news_from_disk()
+        if disk_news:
+            NEWS_CACHE["data"] = disk_news
+            NEWS_CACHE["last_updated"] = now
+
+    if cache_expired:
+        ensure_news_refresh_started()
+
+    if not NEWS_CACHE["data"]:
+        ensure_news_refresh_started()
         NEWS_CACHE["last_updated"] = now
 
     news_data = NEWS_CACHE["data"]
@@ -148,6 +189,7 @@ async def get_latest_news(
         "limit": limit,
         "total": total,
         "totalPages": (total + limit - 1) // limit,
+        "refreshing": NEWS_REFRESH_TASK is not None and not NEWS_REFRESH_TASK.done(),
         "data": news_data[start:end],
     }
 
@@ -231,15 +273,7 @@ def load_recent_news_for_prediction() -> list[dict]:
     if NEWS_CACHE["data"]:
         return NEWS_CACHE["data"]
 
-    news_path = Path("data/local_storage/latest_news.json")
-    if not news_path.exists():
-        return []
-
-    try:
-        with news_path.open() as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return []
+    return load_news_from_disk()
 
 
 @app.get("/api/predict/{ticker}")
