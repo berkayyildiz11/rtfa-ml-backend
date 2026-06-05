@@ -125,6 +125,7 @@ NEWS_CACHE = {
 NEWS_CACHE_TARGET_ITEMS = 80
 NEWS_REFRESH_INTERVAL_SECONDS = int(os.environ.get("NEWS_REFRESH_INTERVAL_SECONDS", "3600"))
 NEWS_LOOKBACK_DAYS = int(os.environ.get("NEWS_LOOKBACK_DAYS", "7"))
+NEWS_INITIAL_REFRESH_DELAY_SECONDS = int(os.environ.get("NEWS_INITIAL_REFRESH_DELAY_SECONDS", "15"))
 NEWS_CACHE_TTL = timedelta(seconds=NEWS_REFRESH_INTERVAL_SECONDS)
 NEWS_STORAGE_PATH = Path("data/local_storage/latest_news.json")
 NEWS_REFRESH_TASK = None
@@ -174,6 +175,7 @@ def ensure_news_refresh_started():
 
 
 async def refresh_news_every_hour():
+    await asyncio.sleep(NEWS_INITIAL_REFRESH_DELAY_SECONDS)
     while True:
         ensure_news_refresh_started()
         await asyncio.sleep(NEWS_REFRESH_INTERVAL_SECONDS)

@@ -6,7 +6,6 @@ from datetime import datetime, timedelta, timezone
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 
-from src.models.nlp_sentiment import FinBERTSentiment
 from src.utils.news_filters import analyze_article_relevance
 
 load_dotenv()
@@ -24,7 +23,19 @@ TICKERS = [
 
 DEFAULT_MAX_ITEMS = 80
 DEFAULT_LOOKBACK_DAYS = 7
-MAX_CONCURRENT_NEWS_REQUESTS = 5
+MAX_CONCURRENT_NEWS_REQUESTS = int(os.getenv("NEWS_MAX_CONCURRENT_REQUESTS", "10"))
+USE_FINBERT_FOR_NEWS = os.getenv("USE_FINBERT_FOR_NEWS", "false").lower() == "true"
+
+POSITIVE_TERMS = {
+    "beat", "beats", "strong", "surge", "surges", "rise", "rises", "gain", "gains",
+    "upgrade", "upgraded", "bullish", "growth", "record", "profit", "profits",
+    "outperform", "positive", "raises", "raised", "higher", "optimistic",
+}
+NEGATIVE_TERMS = {
+    "miss", "misses", "weak", "fall", "falls", "drop", "drops", "downgrade",
+    "downgraded", "bearish", "loss", "losses", "lawsuit", "probe", "warning",
+    "cuts", "cut", "lower", "negative", "concern", "concerns", "slump",
+}
 
 # 1. async def yapıldı ve dışarıdan 'client' parametresi alacak şekilde güncellendi
 async def fetch_daily_news(client: httpx.AsyncClient, ticker: str, lookback_days: int = 1) -> list:
@@ -66,6 +77,49 @@ def _news_key(item: dict) -> str:
     return f"{item['url']}-{item['timestamp']}-{item['ticker']}"
 
 
+def _lightweight_sentiment(headline: str, summary: str = "") -> dict:
+    text = f"{headline} {summary}".lower()
+    words = {
+        word.strip(".,:;!?()[]{}\"'")
+        for word in text.split()
+    }
+    positive_hits = len(words & POSITIVE_TERMS)
+    negative_hits = len(words & NEGATIVE_TERMS)
+    net_score = positive_hits - negative_hits
+
+    if net_score > 0:
+        score = min(0.75, 0.25 + net_score * 0.15)
+        label = "positive"
+    elif net_score < 0:
+        score = max(-0.75, -0.25 + net_score * 0.15)
+        label = "negative"
+    else:
+        score = 0.0
+        label = "neutral"
+
+    confidence = min(0.75, 0.45 + abs(net_score) * 0.1)
+    return {
+        "sentiment_score": round(score, 4),
+        "sentiment_label": label,
+        "sentiment_confidence": round(confidence, 4),
+    }
+
+
+def _build_sentiment_analyzer():
+    if not USE_FINBERT_FOR_NEWS:
+        return None
+
+    from src.models.nlp_sentiment import FinBERTSentiment
+
+    return FinBERTSentiment()
+
+
+def _analyze_news_sentiment(analyzer, headline: str, summary: str) -> dict:
+    if analyzer is None:
+        return _lightweight_sentiment(headline, summary)
+    return analyzer.analyze_article(headline, summary)
+
+
 # 3. Ana pipeline fonksiyonu async yapıldı
 async def run_news_pipeline(
     max_items: int | None = None,
@@ -75,7 +129,7 @@ async def run_news_pipeline(
     all_news_data = []
     seen_news_keys = set()
     print("Starting News Fetch Pipeline...")
-    sentiment_analyzer = FinBERTSentiment()
+    sentiment_analyzer = _build_sentiment_analyzer()
 
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_NEWS_REQUESTS)
 
@@ -106,7 +160,7 @@ async def run_news_pipeline(
                 if not relevance["is_relevant"]:
                     continue
 
-                sentiment = sentiment_analyzer.analyze_article(headline, summary)
+                sentiment = _analyze_news_sentiment(sentiment_analyzer, headline, summary)
                 clean_item = {
                     "ticker": ticker,
                     "timestamp": timestamp,
