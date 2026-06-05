@@ -1,6 +1,7 @@
 from pathlib import Path
 import copy
 import json
+import pickle
 import random
 
 import pandas as pd
@@ -52,6 +53,15 @@ HORIZON_CONFIGS = {
     "3m": 63,
     "6m": 126,
     "1y": 252,
+}
+
+INFERENCE_WINDOW_BY_PERIOD = {
+    "1d": 30,
+    "1w": 30,
+    "1m": 30,
+    "3m": 30,
+    "6m": 30,
+    "1y": 126,
 }
 
 
@@ -442,6 +452,8 @@ def run_lstm_relative(
     print(test_metrics["confusion_matrix"])
 
     torch.save(model.state_dict(), save_dir / f"final_lstm_{horizon_name}.pt")
+    with open(save_dir / f"scaler_{horizon_name}.pkl", "wb") as f:
+        pickle.dump(scaler, f)
     save_metrics(test_metrics, save_dir / f"lstm_{horizon_name}_test_metrics.json")
 
     return model, scaler, test_metrics

@@ -2,9 +2,11 @@
 
 import os
 import asyncio
+import json
 import math
 import httpx
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import Literal
 from contextlib import asynccontextmanager
 
@@ -13,11 +15,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 
+from src.services.prediction_service import build_prediction_response
+
 # .env dosyasını yükle
 load_dotenv()
 
 # --- 1. AYARLAR VE KESİN AYRILMIŞ ANAHTARLAR ---
-MONGO_URI = os.environ.get("MONGO_URI")
+MONGO_URI = os.environ.get("MONGO_URI") or os.environ.get("MONGODB_URI")
 
 # İki anahtarı birbirinden tamamen bağımsız değişkenlere eşitleyelim
 STOCK_KEY = os.environ.get("FINNHUB_API_KEY2")
@@ -226,9 +230,59 @@ async def get_stock_chart_data(ticker: str, period: str = Query("1m", descriptio
         return {"status": "error", "message": str(e)}
     
 
-@app.get("/api/predict/{ticker}?period={period}")
+def load_recent_news_for_prediction() -> list[dict]:
+    if NEWS_CACHE["data"]:
+        return NEWS_CACHE["data"]
+
+    news_path = Path("data/local_storage/latest_news.json")
+    if not news_path.exists():
+        return []
+
+    try:
+        with news_path.open() as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+@app.get("/api/predict/{ticker}")
 async def predict_stock_price(
     ticker: str,
-    period: Literal["1d", "1w", "1m", "3m", "6m", "1y"] = "1m"
+    period: Literal["1d", "1w", "1m", "3m", "6m", "1y"] = "1m",
+    explain: bool = Query(True, description="Return user-facing decision explanation"),
 ):
-    return {"status": "error", "message": "Bu özellik henüz geliştirilme aşamasında."}
+    ticker = ticker.upper()
+    now = datetime.now(timezone.utc)
+    start_date = now - timedelta(days=1095)
+
+    try:
+        cursor = db.historical_prices.find(
+            {"ticker": ticker, "date": {"$gte": start_date}},
+            {"_id": 0},
+        ).sort("date", 1)
+        historical_prices = await cursor.to_list(length=100000)
+
+        sp500_cursor = db.sp500_datas.find(
+            {"date": {"$gte": start_date}},
+            {"_id": 0},
+        ).sort("date", 1)
+        sp500_prices = await sp500_cursor.to_list(length=100000)
+
+        latest_realtime = await trades_col.find_one(
+            {"symbol": ticker},
+            {"_id": 0},
+            sort=[("date", -1)],
+        )
+
+        return build_prediction_response(
+            ticker=ticker,
+            period=period,
+            historical_prices=historical_prices,
+            sp500_prices=sp500_prices,
+            latest_realtime=latest_realtime,
+            news_items=load_recent_news_for_prediction(),
+            explain=explain,
+            now=now,
+        )
+    except Exception as e:
+        return {"status": "error", "ticker": ticker, "period": period, "message": str(e)}
