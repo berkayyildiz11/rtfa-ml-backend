@@ -239,6 +239,10 @@ class WeightAdjustor:
                     public_signals,
                 ),
                 "baseline_score": baseline_score,
+                "baseline_description": (
+                    "Baseline is the neutral reference score: it assumes the market-pattern "
+                    "signal, time-series forecast signal, and recent news sentiment are all neutral."
+                ),
                 "final_score": final_score,
                 "contributions": contributions,
                 "decision_details": self._decision_details(
@@ -514,13 +518,17 @@ class WeightAdjustor:
                 "score": None,
                 "percentage": None,
                 "label": "unspecified",
+                "display": "unspecified",
             }
 
         score = self._clip(confidence, 0.0, 1.0)
+        percentage = int(round(score * 100))
+        label = self._confidence_text(score)
         return {
             "score": round(score, 4),
-            "percentage": int(round(score * 100)),
-            "label": self._confidence_text(score),
+            "percentage": percentage,
+            "label": label,
+            "display": f"{percentage}% ({label})",
         }
 
     def _prediction_confidence(

@@ -264,12 +264,13 @@ class WeightAdjustorTests(unittest.TestCase):
 
         self.assertEqual(
             set(prediction_confidence),
-            {"score", "percentage", "label"},
+            {"score", "percentage", "label", "display"},
         )
         self.assertIsInstance(prediction_confidence["percentage"], int)
         self.assertIn(prediction_confidence["label"], {"low", "moderate", "high"})
         self.assertEqual(forecast_confidence["percentage"], 78)
         self.assertEqual(forecast_confidence["label"], "high")
+        self.assertEqual(forecast_confidence["display"], "78% (high)")
         self.assertEqual(sentiment_confidence["percentage"], 84)
         self.assertEqual(sentiment_confidence["label"], "high")
 
@@ -287,6 +288,7 @@ class WeightAdjustorTests(unittest.TestCase):
         self.assertIsNone(market_confidence["score"])
         self.assertIsNone(market_confidence["percentage"])
         self.assertEqual(market_confidence["label"], "unspecified")
+        self.assertEqual(market_confidence["display"], "unspecified")
 
     def test_strong_forecast_confidence_has_positive_public_contribution(self):
         adjustor = WeightAdjustor(weights_path=None)
