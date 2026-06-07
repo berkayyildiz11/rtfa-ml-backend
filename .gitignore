@@ -212,3 +212,6 @@ __marimo__/
 .DS_Store
 .DS_Store
 **/.DS_Store
+
+# =========================
+document_reviews/
