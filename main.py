@@ -15,7 +15,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 
-from src.services.prediction_service import build_prediction_response
+from src.services.prediction_service import (
+    build_prediction_response_async,
+    build_recent_sentiment_signal,
+)
 
 # .env dosyasını yükle
 load_dotenv()
@@ -129,6 +132,11 @@ NEWS_INITIAL_REFRESH_DELAY_SECONDS = int(os.environ.get("NEWS_INITIAL_REFRESH_DE
 NEWS_CACHE_TTL = timedelta(seconds=NEWS_REFRESH_INTERVAL_SECONDS)
 NEWS_STORAGE_PATH = Path("data/local_storage/latest_news.json")
 NEWS_REFRESH_TASK = None
+NEWS_MIN_RELEVANCE_SCORE = float(os.environ.get("NEWS_MIN_RELEVANCE_SCORE", "0.55"))
+PREDICTION_SENTIMENT_CACHE = {
+    "data": {},
+    "last_updated": None,
+}
 
 # Haber fetcher importunu fonksiyonun hemen üzerinde yapalım ki iç içe geçmesin
 from data.fetcher import run_news_pipeline
@@ -152,6 +160,11 @@ def warm_news_cache_from_disk():
     if disk_news:
         NEWS_CACHE["data"] = disk_news
         NEWS_CACHE["last_updated"] = datetime.now(timezone.utc)
+        refresh_prediction_sentiment_cache_from_news(
+            disk_news,
+            now=NEWS_CACHE["last_updated"],
+            use_finbert=False,
+        )
 
 
 async def refresh_news_cache():
@@ -163,8 +176,109 @@ async def refresh_news_cache():
             lookback_days=NEWS_LOOKBACK_DAYS,
         )
         NEWS_CACHE["last_updated"] = datetime.now(timezone.utc)
+        try:
+            await asyncio.to_thread(
+                refresh_prediction_sentiment_cache_from_news,
+                NEWS_CACHE["data"],
+                NEWS_CACHE["last_updated"],
+                True,
+            )
+        except Exception as exc:
+            print(f"FinBERT prediction sentiment cache refresh failed: {exc}")
+            await asyncio.to_thread(
+                refresh_prediction_sentiment_cache_from_news,
+                NEWS_CACHE["data"],
+                NEWS_CACHE["last_updated"],
+                False,
+            )
     finally:
         NEWS_REFRESH_TASK = None
+
+
+def refresh_prediction_sentiment_cache_from_news(
+    news_items: list[dict],
+    now: datetime,
+    use_finbert: bool = True,
+):
+    cache_data = {}
+    for ticker in STOCKS:
+        cache_data[ticker] = {
+            "1d": build_recent_sentiment_signal(
+                ticker=ticker,
+                period="1d",
+                news_items=news_items,
+                now=now,
+                use_finbert=use_finbert,
+            ),
+            "1w": build_recent_sentiment_signal(
+                ticker=ticker,
+                period="1w",
+                news_items=news_items,
+                now=now,
+                use_finbert=use_finbert,
+            ),
+        }
+
+    PREDICTION_SENTIMENT_CACHE["data"] = cache_data
+    PREDICTION_SENTIMENT_CACHE["last_updated"] = now
+
+
+def get_cached_prediction_sentiment(ticker: str, period: str) -> dict | None:
+    if period not in {"1d", "1w"}:
+        return None
+
+    ticker_cache = PREDICTION_SENTIMENT_CACHE["data"].get(ticker.upper(), {})
+    signal = ticker_cache.get(period)
+    return signal if isinstance(signal, dict) else None
+
+
+def rank_news_for_display(news_items: list[dict]) -> list[dict]:
+    ranked_items = [
+        item
+        for item in news_items
+        if _news_relevance(item) >= NEWS_MIN_RELEVANCE_SCORE
+    ]
+    ranked_items.sort(
+        key=lambda item: (
+            _news_effect_score(item),
+            _parse_news_timestamp(item.get("timestamp")) or datetime.min.replace(tzinfo=timezone.utc),
+        ),
+        reverse=True,
+    )
+    return ranked_items
+
+
+def _news_effect_score(item: dict) -> float:
+    relevance = _news_relevance(item)
+    confidence = _float_value(item.get("sentiment_confidence"), default=0.45)
+    sentiment_strength = abs(_float_value(item.get("sentiment_score"), default=0.0))
+    return relevance * (0.50 + confidence * 0.50) * (0.60 + sentiment_strength * 0.40)
+
+
+def _news_relevance(item: dict) -> float:
+    return _float_value(item.get("relevance_score"), default=1.0)
+
+
+def _float_value(value, default: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    if math.isnan(parsed):
+        return default
+    return parsed
+
+
+def _parse_news_timestamp(value) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def ensure_news_refresh_started():
@@ -205,7 +319,7 @@ async def get_latest_news(
         ensure_news_refresh_started()
         NEWS_CACHE["last_updated"] = now
 
-    news_data = NEWS_CACHE["data"]
+    news_data = rank_news_for_display(NEWS_CACHE["data"])
     total = len(news_data)
     start = (page - 1) * limit
     end = start + limit
@@ -332,15 +446,17 @@ async def predict_stock_price(
             sort=[("date", -1)],
         )
 
-        return build_prediction_response(
+        return await build_prediction_response_async(
             ticker=ticker,
             period=period,
             historical_prices=historical_prices,
             sp500_prices=sp500_prices,
             latest_realtime=latest_realtime,
             news_items=load_recent_news_for_prediction(),
+            precomputed_sentiment_signal=get_cached_prediction_sentiment(ticker, period),
             explain=explain,
             now=now,
+            use_finbert_for_prediction=False,
         )
     except Exception as e:
         return {"status": "error", "ticker": ticker, "period": period, "message": str(e)}

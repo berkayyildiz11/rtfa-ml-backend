@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 import math
 import os
@@ -49,6 +50,7 @@ def build_prediction_response(
     sp500_prices: list[dict] | None = None,
     latest_realtime: dict | None = None,
     news_items: list[dict] | None = None,
+    precomputed_sentiment_signal: dict[str, object] | None = None,
     explain: bool = True,
     now: datetime | None = None,
     adjustor: WeightAdjustor | None = None,
@@ -73,13 +75,94 @@ def build_prediction_response(
         sp500_rows=sp500_prices or [],
     )
     forecast_signal = build_forecast_signal(price_df, period)
-    sentiment_signal = build_recent_sentiment_signal(
+    sentiment_signal = resolve_sentiment_signal(
         ticker=ticker,
         period=period,
         news_items=news_items or [],
         now=now,
+        precomputed_sentiment_signal=precomputed_sentiment_signal,
         use_finbert=use_finbert_for_prediction,
     )
+
+    return compose_prediction_response(
+        ticker=ticker,
+        period=period,
+        price_df=price_df,
+        market_signal=market_signal,
+        forecast_signal=forecast_signal,
+        sentiment_signal=sentiment_signal,
+        explain=explain,
+        adjustor=adjustor,
+    )
+
+
+async def build_prediction_response_async(
+    *,
+    ticker: str,
+    period: PredictionPeriod,
+    historical_prices: list[dict],
+    sp500_prices: list[dict] | None = None,
+    latest_realtime: dict | None = None,
+    news_items: list[dict] | None = None,
+    precomputed_sentiment_signal: dict[str, object] | None = None,
+    explain: bool = True,
+    now: datetime | None = None,
+    adjustor: WeightAdjustor | None = None,
+    use_finbert_for_prediction: bool = USE_FINBERT_FOR_PREDICTION,
+) -> dict[str, object]:
+    ticker = ticker.upper()
+    now = now or datetime.now(timezone.utc)
+    adjustor = adjustor or WeightAdjustor()
+
+    price_df = prepare_price_frame(historical_prices, latest_realtime)
+    if len(price_df) < MIN_PRICE_ROWS:
+        raise ValueError(
+            f"Not enough price history for {ticker}. Need at least {MIN_PRICE_ROWS} rows, "
+            f"got {len(price_df)}."
+        )
+
+    market_task = asyncio.to_thread(
+        build_market_pattern_signal,
+        ticker=ticker,
+        period=period,
+        price_df=price_df,
+        stock_rows=historical_prices,
+        sp500_rows=sp500_prices or [],
+    )
+    forecast_task = asyncio.to_thread(build_forecast_signal, price_df, period)
+    sentiment_signal = resolve_sentiment_signal(
+        ticker=ticker,
+        period=period,
+        news_items=news_items or [],
+        now=now,
+        precomputed_sentiment_signal=precomputed_sentiment_signal,
+        use_finbert=use_finbert_for_prediction,
+    )
+    market_signal, forecast_signal = await asyncio.gather(market_task, forecast_task)
+
+    return compose_prediction_response(
+        ticker=ticker,
+        period=period,
+        price_df=price_df,
+        market_signal=market_signal,
+        forecast_signal=forecast_signal,
+        sentiment_signal=sentiment_signal,
+        explain=explain,
+        adjustor=adjustor,
+    )
+
+
+def compose_prediction_response(
+    *,
+    ticker: str,
+    period: PredictionPeriod,
+    price_df: pd.DataFrame,
+    market_signal: dict[str, object],
+    forecast_signal: dict[str, object],
+    sentiment_signal: dict[str, object],
+    explain: bool,
+    adjustor: WeightAdjustor,
+) -> dict[str, object]:
 
     kwargs = {
         "period": period,
@@ -112,6 +195,51 @@ def build_prediction_response(
             "recent_news_sentiment": sentiment_signal["source"],
         },
         **result,
+    }
+
+
+def resolve_sentiment_signal(
+    *,
+    ticker: str,
+    period: PredictionPeriod,
+    news_items: list[dict],
+    now: datetime,
+    precomputed_sentiment_signal: dict[str, object] | None = None,
+    use_finbert: bool = USE_FINBERT_FOR_PREDICTION,
+) -> dict[str, object]:
+    if precomputed_sentiment_signal is not None:
+        return normalize_sentiment_signal(precomputed_sentiment_signal, period)
+
+    return build_recent_sentiment_signal(
+        ticker=ticker,
+        period=period,
+        news_items=news_items,
+        now=now,
+        use_finbert=use_finbert,
+    )
+
+
+def normalize_sentiment_signal(signal: dict[str, object], period: PredictionPeriod) -> dict[str, object]:
+    if period not in SHORT_SENTIMENT_PERIODS:
+        return {
+            "score": 0.0,
+            "direction": "neutral",
+            "confidence": None,
+            "relevance": None,
+            "news_count": 0,
+            "used_for_period": False,
+            "source": "not_used_for_period",
+        }
+
+    score = float(signal.get("score", 0.0) or 0.0)
+    return {
+        "score": round(max(-1.0, min(1.0, score)), 4),
+        "direction": str(signal.get("direction") or sentiment_direction(score)),
+        "confidence": signal.get("confidence"),
+        "relevance": signal.get("relevance"),
+        "news_count": int(signal.get("news_count", 0) or 0),
+        "used_for_period": bool(signal.get("used_for_period", True)),
+        "source": str(signal.get("source") or "cached_prediction_sentiment"),
     }
 
 

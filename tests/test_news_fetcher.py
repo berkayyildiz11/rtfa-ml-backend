@@ -1,6 +1,6 @@
 import unittest
 
-from data.fetcher import _lightweight_sentiment
+from data.fetcher import _dedupe_and_sort_news, _limit_news_by_ticker, _lightweight_sentiment
 
 
 class NewsFetcherTests(unittest.TestCase):
@@ -30,6 +30,24 @@ class NewsFetcherTests(unittest.TestCase):
 
         self.assertEqual(result["sentiment_label"], "neutral")
         self.assertEqual(result["sentiment_score"], 0.0)
+
+    def test_news_limit_keeps_ticker_diversity(self):
+        items = []
+        for ticker in ["AAPL", "MSFT", "NVDA"]:
+            for index in range(4):
+                items.append(
+                    {
+                        "ticker": ticker,
+                        "timestamp": f"2026-06-08T12:0{index}:00+00:00",
+                        "url": f"https://example.com/{ticker}/{index}",
+                    }
+                )
+
+        limited = _limit_news_by_ticker(_dedupe_and_sort_news(items), max_items=6)
+        tickers = {item["ticker"] for item in limited}
+
+        self.assertEqual(len(limited), 6)
+        self.assertEqual(tickers, {"AAPL", "MSFT", "NVDA"})
 
 
 if __name__ == "__main__":

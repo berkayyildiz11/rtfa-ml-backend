@@ -1,9 +1,11 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 import json
 import unittest
 from unittest.mock import patch
 
 from src.services.prediction_service import (
+    build_prediction_response_async,
     build_prediction_response,
     build_recent_sentiment_signal,
     prepare_price_frame,
@@ -188,6 +190,38 @@ class PredictionServiceTests(unittest.TestCase):
 
         self.assertEqual(signal["source"], "cached_news_sentiment")
         self.assertEqual(signal["direction"], "negative")
+
+    def test_async_prediction_response_uses_precomputed_sentiment(self):
+        now = datetime(2026, 6, 5, tzinfo=timezone.utc)
+
+        response = asyncio.run(
+            build_prediction_response_async(
+                ticker="AAPL",
+                period="1w",
+                historical_prices=make_history(now),
+                precomputed_sentiment_signal={
+                    "score": 0.6,
+                    "direction": "positive",
+                    "confidence": 0.8,
+                    "relevance": 0.9,
+                    "news_count": 3,
+                    "used_for_period": True,
+                    "source": "cached_prediction_sentiment",
+                },
+                explain=True,
+                now=now,
+                use_finbert_for_prediction=False,
+            )
+        )
+
+        self.assertEqual(
+            response["signal_sources"]["recent_news_sentiment"],
+            "cached_prediction_sentiment",
+        )
+        self.assertGreater(
+            response["explanation"]["contributions"]["recent_news_sentiment"],
+            0.0,
+        )
 
     def test_prepare_price_frame_appends_latest_realtime_price(self):
         now = datetime(2026, 6, 5, tzinfo=timezone.utc)

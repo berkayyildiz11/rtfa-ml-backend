@@ -77,6 +77,54 @@ def _news_key(item: dict) -> str:
     return f"{item['url']}-{item['timestamp']}-{item['ticker']}"
 
 
+def _dedupe_and_sort_news(items: list[dict]) -> list[dict]:
+    unique_news = {}
+    for item in items:
+        unique_key = _news_key(item)
+        if unique_key not in unique_news:
+            unique_news[unique_key] = item
+
+    sorted_items = list(unique_news.values())
+    sorted_items.sort(key=lambda x: x["timestamp"], reverse=True)
+    return sorted_items
+
+
+def _limit_news_by_ticker(items: list[dict], max_items: int | None) -> list[dict]:
+    if max_items is None or len(items) <= max_items:
+        return items
+
+    grouped_items = {ticker: [] for ticker in TICKERS}
+    for item in items:
+        grouped_items.setdefault(item["ticker"], []).append(item)
+
+    selected = []
+    seen_keys = set()
+    while len(selected) < max_items:
+        added_this_round = False
+        for ticker in TICKERS:
+            ticker_items = grouped_items.get(ticker, [])
+            if not ticker_items:
+                continue
+
+            item = ticker_items.pop(0)
+            unique_key = _news_key(item)
+            if unique_key in seen_keys:
+                continue
+
+            selected.append(item)
+            seen_keys.add(unique_key)
+            added_this_round = True
+
+            if len(selected) >= max_items:
+                break
+
+        if not added_this_round:
+            break
+
+    selected.sort(key=lambda x: x["timestamp"], reverse=True)
+    return selected
+
+
 def _lightweight_sentiment(headline: str, summary: str = "") -> dict:
     text = f"{headline} {summary}".lower()
     words = {
@@ -127,7 +175,6 @@ async def run_news_pipeline(
 ):
     max_items = DEFAULT_MAX_ITEMS if max_items is None else max_items
     all_news_data = []
-    seen_news_keys = set()
     print("Starting News Fetch Pipeline...")
     sentiment_analyzer = _build_sentiment_analyzer()
 
@@ -173,34 +220,18 @@ async def run_news_pipeline(
                     "relevance_reason": relevance["relevance_reason"],
                     "matched_aliases": relevance["matched_aliases"],
                 }
-                unique_key = _news_key(clean_item)
-                if unique_key in seen_news_keys:
-                    continue
-
-                seen_news_keys.add(unique_key)
                 all_news_data.append(clean_item)
 
-                if max_items is not None and len(all_news_data) >= max_items:
-                    break
-
-            if max_items is not None and len(all_news_data) >= max_items:
-                break
+    all_news_data = _limit_news_by_ticker(
+        _dedupe_and_sort_news(all_news_data),
+        max_items=max_items,
+    )
 
     print(f"\nPipeline complete. Fetched and verified {len(all_news_data)} highly relevant articles.")
 
     # JSON Kaydetme İşlemi
     os.makedirs("data/local_storage", exist_ok=True)
     with open("data/local_storage/latest_news.json", "w") as f:
-        unique_news = {}
-
-        for item in all_news_data:
-            unique_key = _news_key(item)
-
-            if unique_key not in unique_news:
-                unique_news[unique_key] = item
-
-        all_news_data = list(unique_news.values())
-        all_news_data.sort(key=lambda x: x["timestamp"], reverse=True)
         json.dump(all_news_data, f, indent=4)
 
     return all_news_data
