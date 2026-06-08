@@ -124,6 +124,10 @@ NEWS_MAX_CONCURRENT_REQUESTS=10
 USE_FINBERT_FOR_NEWS=false
 USE_FINBERT_FOR_PREDICTION=true
 MAX_PREDICTION_SENTIMENT_ARTICLES=5
+
+ENABLE_INVESTOR_AGENT=true
+INVESTOR_AGENT_CHECK_INTERVAL_SECONDS=3600
+INVESTOR_AGENT_INITIAL_DELAY_SECONDS=30
 ```
 
 For local development, `ENABLE_POLLER=false` is recommended unless you intentionally want the background quote poller to run.
@@ -171,6 +175,42 @@ The current test coverage includes:
 - Prediction response shape and explanation behavior
 - Short-horizon and long-horizon sentiment rules
 - Weight adjustment and calibrated signal behavior
+
+## Paper-Trading Investor Agent
+
+The investor agent is isolated from the prediction models and existing market data collections. It uses the same `MONGODB_URI` and `stock_tracking_db`, but writes only to these collections:
+
+```txt
+agent_runs
+agent_decisions
+agent_trades
+agent_portfolio_snapshots
+```
+
+Start a live 8-day paper-trading run:
+
+```http
+POST /api/agent/start
+```
+
+Starting the agent immediately runs the first decision cycle. While the API process is alive, a background scheduler checks for an active run and executes at most one decision cycle per calendar day. At the end of the 8-day window, the next scheduler check liquidates every open position automatically. You can also liquidate manually:
+
+```http
+POST /api/agent/liquidate
+```
+
+View results:
+
+```http
+GET /api/agent/status
+GET /api/agent/history
+```
+
+Disable automatic agent operation after the test by setting:
+
+```env
+ENABLE_INVESTOR_AGENT=false
+```
 
 ## Project Structure
 

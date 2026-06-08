@@ -19,6 +19,13 @@ from src.services.prediction_service import (
     build_prediction_response_async,
     build_recent_sentiment_signal,
 )
+from src.services.investor_agent import (
+    get_agent_history,
+    get_agent_status,
+    liquidate_agent_run,
+    run_daily_agent_cycle,
+    start_agent_run,
+)
 
 # .env dosyasını yükle
 load_dotenv()
@@ -32,6 +39,9 @@ NEWS_KEY = os.environ.get("FINNHUB_API_KEY")
 
 # Arka plan veri çekme işlemini açıp kapatmak için bir bayrak (Deploy için varsayılanı "true" yaptık) (Local testler için "false" yapın) ("ENABLE_POLLER" bunu yanındaki değeri.)
 ENABLE_POLLER = os.environ.get("ENABLE_POLLER", "true").lower() == "true"
+ENABLE_INVESTOR_AGENT = os.environ.get("ENABLE_INVESTOR_AGENT", "true").lower() == "true"
+INVESTOR_AGENT_CHECK_INTERVAL_SECONDS = int(os.environ.get("INVESTOR_AGENT_CHECK_INTERVAL_SECONDS", "3600"))
+INVESTOR_AGENT_INITIAL_DELAY_SECONDS = int(os.environ.get("INVESTOR_AGENT_INITIAL_DELAY_SECONDS", "30"))
 
 STOCKS = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "NFLX", "INTC", 
@@ -91,13 +101,36 @@ async def poll_stocks_every_50_seconds():
             sleep_time = max(0, 50 - elapsed_time)
             await asyncio.sleep(sleep_time)
 
+
+async def run_investor_agent_scheduler():
+    """Runs the paper-trading agent once per calendar day while a run is active."""
+    await asyncio.sleep(INVESTOR_AGENT_INITIAL_DELAY_SECONDS)
+    while True:
+        try:
+            active_run = await db.agent_runs.find_one({"status": "active"}, {"_id": 0})
+            if active_run:
+                result = await run_daily_agent_cycle(
+                    db,
+                    tickers=STOCKS,
+                    build_prediction_bundle=build_agent_prediction_bundle,
+                )
+                if result.get("status") not in {"already_ran_today", "success", "completed"}:
+                    print(f"Investor agent cycle skipped: {result}")
+        except Exception as exc:
+            print(f"Investor agent scheduler error: {exc}")
+
+        await asyncio.sleep(INVESTOR_AGENT_CHECK_INTERVAL_SECONDS)
+
 # --- 3. FASTAPI YAŞAM DÖNGÜSÜ (LIFESPAN) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     worker_task = None
     news_task = None
+    investor_agent_task = None
     if ENABLE_POLLER:
         worker_task = asyncio.create_task(poll_stocks_every_50_seconds())
+    if ENABLE_INVESTOR_AGENT:
+        investor_agent_task = asyncio.create_task(run_investor_agent_scheduler())
     warm_news_cache_from_disk()
     news_task = asyncio.create_task(refresh_news_every_hour())
     yield
@@ -105,6 +138,8 @@ async def lifespan(app: FastAPI):
         worker_task.cancel()
     if news_task:
         news_task.cancel()
+    if investor_agent_task:
+        investor_agent_task.cancel()
     if NEWS_REFRESH_TASK:
         NEWS_REFRESH_TASK.cancel()
 
@@ -460,3 +495,116 @@ async def predict_stock_price(
         )
     except Exception as e:
         return {"status": "error", "ticker": ticker, "period": period, "message": str(e)}
+
+
+async def build_agent_prediction_bundle(ticker: str) -> dict[str, dict[str, object]]:
+    return {
+        "1d": await build_agent_prediction(ticker, "1d"),
+        "1w": await build_agent_prediction(ticker, "1w"),
+    }
+
+
+async def build_agent_prediction(
+    ticker: str,
+    period: Literal["1d", "1w"],
+) -> dict[str, object]:
+    ticker = ticker.upper()
+    now = datetime.now(timezone.utc)
+    start_date = now - timedelta(days=1095)
+
+    cursor = db.historical_prices.find(
+        {"ticker": ticker, "date": {"$gte": start_date}},
+        {"_id": 0},
+    ).sort("date", 1)
+    historical_prices = await cursor.to_list(length=100000)
+
+    sp500_cursor = db.sp500_datas.find(
+        {"date": {"$gte": start_date}},
+        {"_id": 0},
+    ).sort("date", 1)
+    sp500_prices = await sp500_cursor.to_list(length=100000)
+
+    latest_realtime = await trades_col.find_one(
+        {"symbol": ticker},
+        {"_id": 0},
+        sort=[("date", -1)],
+    )
+
+    return await build_prediction_response_async(
+        ticker=ticker,
+        period=period,
+        historical_prices=historical_prices,
+        sp500_prices=sp500_prices,
+        latest_realtime=latest_realtime,
+        news_items=load_recent_news_for_prediction(),
+        precomputed_sentiment_signal=get_cached_prediction_sentiment(ticker, period),
+        explain=False,
+        now=now,
+        use_finbert_for_prediction=False,
+    )
+
+
+async def lookup_agent_liquidation_price(ticker: str) -> float | None:
+    bundle = await build_agent_prediction_bundle(ticker)
+    prediction = bundle.get("1d") or bundle.get("1w")
+    if not prediction:
+        return None
+    return float(prediction["latest_price"])
+
+
+@app.post("/api/agent/start")
+async def start_investor_agent():
+    if not ENABLE_INVESTOR_AGENT:
+        return {"status": "disabled", "message": "Investor agent is disabled by ENABLE_INVESTOR_AGENT."}
+
+    start_result = await start_agent_run(db)
+    if start_result["status"] != "started":
+        return start_result
+
+    first_cycle = await run_daily_agent_cycle(
+        db,
+        tickers=STOCKS,
+        build_prediction_bundle=build_agent_prediction_bundle,
+    )
+    return {
+        **start_result,
+        "first_cycle": first_cycle,
+    }
+
+
+@app.post("/api/agent/run-daily-cycle")
+async def run_investor_agent_daily_cycle(
+    force: bool = Query(False, description="Allow another decision cycle for today's date"),
+):
+    if not ENABLE_INVESTOR_AGENT:
+        return {"status": "disabled", "message": "Investor agent is disabled by ENABLE_INVESTOR_AGENT."}
+
+    return await run_daily_agent_cycle(
+        db,
+        tickers=STOCKS,
+        build_prediction_bundle=build_agent_prediction_bundle,
+        force=force,
+    )
+
+
+@app.post("/api/agent/liquidate")
+async def liquidate_investor_agent(
+    reason: str = Query("manual_liquidation"),
+):
+    return await liquidate_agent_run(
+        db,
+        price_lookup=lookup_agent_liquidation_price,
+        reason=reason,
+    )
+
+
+@app.get("/api/agent/status")
+async def get_investor_agent_status():
+    return await get_agent_status(db)
+
+
+@app.get("/api/agent/history")
+async def get_investor_agent_history(
+    limit: int = Query(100, ge=1, le=1000),
+):
+    return await get_agent_history(db, limit=limit)
