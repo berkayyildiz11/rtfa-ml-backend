@@ -1,8 +1,10 @@
 import unittest
+from datetime import datetime, timezone
 
 from src.services.investor_agent import (
     MAX_OPEN_POSITIONS,
     allocate_cash,
+    as_utc_datetime,
     build_investment_opportunity,
     select_buy_candidates,
 )
@@ -119,6 +121,11 @@ class InvestorAgentTests(unittest.TestCase):
         )
 
         self.assertGreater(allocation["NVDA"], allocation["AAPL"])
+
+    def test_mongo_naive_datetime_is_treated_as_utc(self):
+        parsed = as_utc_datetime(datetime(2026, 6, 9, 12, 0, 0))
+
+        self.assertEqual(parsed.tzinfo, timezone.utc)
 
 
 if __name__ == "__main__":

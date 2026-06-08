@@ -130,7 +130,7 @@ async def run_daily_agent_cycle(
     if not run:
         return {"status": "error", "message": "No active agent run found."}
 
-    if now >= run["ends_at"]:
+    if now >= as_utc_datetime(run["ends_at"]):
         return await liquidate_agent_run(
             db,
             price_lookup=_latest_prediction_price_lookup(tickers, build_prediction_bundle),
@@ -576,6 +576,12 @@ def _prediction_confidence_score(prediction: dict[str, object]) -> float:
     if isinstance(confidence, dict) and confidence.get("score") is not None:
         return float(confidence["score"])
     return 0.0
+
+
+def as_utc_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def _latest_prediction_price_lookup(
