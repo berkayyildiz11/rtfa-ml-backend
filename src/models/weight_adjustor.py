@@ -612,6 +612,9 @@ class WeightAdjustor:
         news_count: int,
     ) -> float:
         score_strength = abs(self._clip(sentiment_score, -1.0, 1.0))
+        if news_count <= 0:
+            return 0.0
+
         confidence = (
             self._clip(sentiment_confidence, 0.0, 1.0)
             if sentiment_confidence is not None
@@ -623,8 +626,13 @@ class WeightAdjustor:
             else 1.0
         )
         volume = self._news_volume_multiplier(news_count)
+        evidence_strength = confidence * relevance * volume
 
-        return score_strength * confidence * relevance * volume
+        if score_strength == 0:
+            return evidence_strength * 0.25
+
+        directional_strength = max(score_strength, 0.35)
+        return directional_strength * evidence_strength
 
     def _news_volume_multiplier(self, news_count: int) -> float:
         if news_count <= 0:

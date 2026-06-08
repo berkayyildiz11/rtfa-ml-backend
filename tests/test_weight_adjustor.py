@@ -41,6 +41,32 @@ class WeightAdjustorTests(unittest.TestCase):
 
         self.assertGreater(weights.sentiment, 0)
 
+    def test_mild_directional_news_gets_visible_short_horizon_weight(self):
+        adjustor = WeightAdjustor(weights_path=None)
+
+        weights = adjustor.adjust_weights(
+            "1d",
+            sentiment_score=0.05,
+            sentiment_confidence=0.8,
+            sentiment_relevance=0.9,
+            news_count=2,
+        )
+
+        self.assertGreaterEqual(weights.sentiment, 0.04)
+
+    def test_no_recent_news_keeps_sentiment_weight_zero(self):
+        adjustor = WeightAdjustor(weights_path=None)
+
+        weights = adjustor.adjust_weights(
+            "1d",
+            sentiment_score=0.2,
+            sentiment_confidence=0.8,
+            sentiment_relevance=0.9,
+            news_count=0,
+        )
+
+        self.assertEqual(weights.sentiment, 0.0)
+
     def test_sentiment_is_ignored_for_longer_predictions(self):
         adjustor = WeightAdjustor(weights_path=None)
 
