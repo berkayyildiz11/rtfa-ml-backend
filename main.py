@@ -405,8 +405,10 @@ async def get_stock_chart_data(ticker: str, period: str = Query("1m", descriptio
 
     try:
         # 1 günlük periyotta sadece anlık (intraday) verileri getir
+        using_realtime_series = False
         if period == "1d":
             query = {"symbol": ticker, "date": {"$gte": start_date}}
+            using_realtime_series = True
         else:
             # 1 günün üzerindeki periyotlarda geçmiş günlük verileri getir
             query = {"ticker": ticker, "date": {"$gte": start_date}}
@@ -419,6 +421,13 @@ async def get_stock_chart_data(ticker: str, period: str = Query("1m", descriptio
         if not results and period != "1d":
             cursor = db.historical_prices.find(query).sort("date", 1)
             results = await cursor.to_list(length=100000)
+
+        # Günlük geçmiş veri son 1 haftayı kapsamıyorsa, 1w grafiğini anlık veriden doldur
+        if not results and period == "1w":
+            query = {"symbol": ticker, "date": {"$gte": start_date}}
+            cursor = trades_col.find(query).sort("date", 1)
+            results = await cursor.to_list(length=100000)
+            using_realtime_series = True
         
         formatted_data = []
         for doc in results:
@@ -431,7 +440,7 @@ async def get_stock_chart_data(ticker: str, period: str = Query("1m", descriptio
                 })
 
         # Eğer periyot 1 günden büyükse, grafiğin sağ ucuna en son anlık fiyatı da (real-time) ekle
-        if period != "1d":
+        if period != "1d" and not using_realtime_series:
             latest_realtime = await trades_col.find_one({"symbol": ticker}, sort=[("date", -1)])
             if latest_realtime and latest_realtime.get("price") is not None:
                 if not math.isnan(latest_realtime["price"]):
