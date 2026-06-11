@@ -5,7 +5,7 @@ import asyncio
 import json
 import math
 import httpx
-from datetime import datetime, timezone, timedelta, time
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Literal
 from contextlib import asynccontextmanager
@@ -403,90 +403,46 @@ async def get_stock_chart_data(ticker: str, period: str = Query("1m", descriptio
     else:
         return {"status": "error", "message": "Geçersiz periyot"}
 
-    if period != "1d":
-        start_date = datetime.combine(start_date.date(), time.min, tzinfo=timezone.utc)
-
     try:
+        # 1 günlük periyotta sadece anlık (intraday) verileri getir
         if period == "1d":
-            # 1 günlük periyotta sadece anlık (intraday) verileri getir
             query = {"symbol": ticker, "date": {"$gte": start_date}}
-            cursor = trades_col.find(query).sort("date", 1)
-            results = await cursor.to_list(length=100000)
         else:
-            # 1 günün üzerindeki periyotlarda OHLC günlük geçmiş veri gerekir.
+            # 1 günün üzerindeki periyotlarda geçmiş günlük verileri getir
             query = {"ticker": ticker, "date": {"$gte": start_date}}
+            
+        # Bazı veritabanı versiyonlarında length=None hatası almamak için güvenli bir limit veriyoruz
+        cursor = trades_col.find(query).sort("date", 1)
+        results = await cursor.to_list(length=100000)
+        
+        # Eğer sp500_datas2 boş döndüyse ve geçmiş veri istiyorsak, historical_prices koleksiyonunu da kontrol et
+        if not results and period != "1d":
             cursor = db.historical_prices.find(query).sort("date", 1)
             results = await cursor.to_list(length=100000)
         
         formatted_data = []
         for doc in results:
-            formatted_doc = format_chart_point(doc)
-            if formatted_doc is not None:
-                formatted_data.append(formatted_doc)
+            price = doc.get("close") if doc.get("close") is not None else doc.get("price")
+            # Eğer fiyat NaN (Not a Number) ise frontend'i çökertmemesi için atla
+            if price is not None and not math.isnan(price):
+                formatted_data.append({
+                    "date": doc["date"].isoformat() if hasattr(doc["date"], "isoformat") else doc["date"],
+                    "price": price
+                })
 
         # Eğer periyot 1 günden büyükse, grafiğin sağ ucuna en son anlık fiyatı da (real-time) ekle
         if period != "1d":
             latest_realtime = await trades_col.find_one({"symbol": ticker}, sort=[("date", -1)])
-            latest_point = format_chart_point(latest_realtime) if latest_realtime else None
-            if latest_point:
-                formatted_data.append(latest_point)
-
-        formatted_data = dedupe_and_sort_chart_points(formatted_data)
+            if latest_realtime and latest_realtime.get("price") is not None:
+                if not math.isnan(latest_realtime["price"]):
+                    formatted_data.append({
+                        "date": latest_realtime["date"].isoformat() if hasattr(latest_realtime["date"], "isoformat") else latest_realtime["date"],
+                        "price": latest_realtime["price"]
+                    })
             
         return {"status": "success", "ticker": ticker, "period": period, "data": formatted_data}
     except Exception as e:
         return {"status": "error", "message": str(e)}
-
-
-def format_chart_point(doc: dict) -> dict | None:
-    if not doc or "date" not in doc:
-        return None
-
-    close = safe_float(doc.get("close") if doc.get("close") is not None else doc.get("price"))
-    if close is None:
-        return None
-
-    open_price = safe_float(doc.get("open"))
-    high = safe_float(doc.get("high"))
-    low = safe_float(doc.get("low"))
-
-    point = {
-        "date": doc["date"].isoformat() if hasattr(doc["date"], "isoformat") else doc["date"],
-        "price": close,
-        "open": open_price if open_price is not None else close,
-        "high": high if high is not None else close,
-        "low": low if low is not None else close,
-        "close": close,
-    }
-
-    volume = safe_float(doc.get("volume"))
-    if volume is not None:
-        point["volume"] = volume
-
-    return point
-
-
-def safe_float(value) -> float | None:
-    if value is None:
-        return None
-
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-
-    if math.isnan(number):
-        return None
-
-    return number
-
-
-def dedupe_and_sort_chart_points(points: list[dict]) -> list[dict]:
-    deduped = {}
-    for point in points:
-        deduped[point["date"]] = point
-
-    return sorted(deduped.values(), key=lambda point: point["date"])
     
 
 def load_recent_news_for_prediction() -> list[dict]:
