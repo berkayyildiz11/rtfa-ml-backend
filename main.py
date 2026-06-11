@@ -428,7 +428,11 @@ async def get_stock_chart_data(ticker: str, period: str = Query("1m", descriptio
             cursor = trades_col.find(query).sort("date", 1)
             results = await cursor.to_list(length=100000)
             using_realtime_series = True
-        
+
+        if period == "1w" and using_realtime_series:
+            formatted_data = build_daily_points_from_realtime(results)
+            return {"status": "success", "ticker": ticker, "period": period, "data": formatted_data}
+
         formatted_data = []
         for doc in results:
             price = doc.get("close") if doc.get("close") is not None else doc.get("price")
@@ -452,6 +456,56 @@ async def get_stock_chart_data(ticker: str, period: str = Query("1m", descriptio
         return {"status": "success", "ticker": ticker, "period": period, "data": formatted_data}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+def build_daily_points_from_realtime(results: list[dict]) -> list[dict]:
+    buckets = {}
+
+    for doc in results:
+        price = doc.get("price")
+        date = doc.get("date")
+        if price is None or date is None:
+            continue
+
+        try:
+            price = float(price)
+        except (TypeError, ValueError):
+            continue
+
+        if math.isnan(price):
+            continue
+
+        day = date.date().isoformat() if hasattr(date, "date") else str(date).split("T")[0].split(" ")[0]
+        bucket = buckets.setdefault(
+            day,
+            {
+                "date": date,
+                "open": price,
+                "high": price,
+                "low": price,
+                "close": price,
+            },
+        )
+        bucket["date"] = date
+        bucket["high"] = max(bucket["high"], price)
+        bucket["low"] = min(bucket["low"], price)
+        bucket["close"] = price
+
+    formatted_data = []
+    for bucket in buckets.values():
+        date = bucket["date"]
+        formatted_data.append(
+            {
+                "date": date.isoformat() if hasattr(date, "isoformat") else date,
+                "price": bucket["close"],
+                "open": bucket["open"],
+                "high": bucket["high"],
+                "low": bucket["low"],
+                "close": bucket["close"],
+            }
+        )
+
+    return sorted(formatted_data, key=lambda point: point["date"])
     
 
 def load_recent_news_for_prediction() -> list[dict]:

@@ -54,14 +54,24 @@ class ChartEndpointTests(unittest.IsolatedAsyncioTestCase):
                     {
                         "symbol": "AAPL",
                         "date": datetime(2026, 6, 10, 12, 1, tzinfo=timezone.utc),
+                        "price": 192.0,
+                    },
+                    {
+                        "symbol": "AAPL",
+                        "date": datetime(2026, 6, 10, 12, 2, tzinfo=timezone.utc),
                         "price": 191.0,
+                    },
+                    {
+                        "symbol": "AAPL",
+                        "date": datetime(2026, 6, 11, 12, 0, tzinfo=timezone.utc),
+                        "price": 193.0,
                     },
                 ],
             ],
             latest={
                 "symbol": "AAPL",
-                "date": datetime(2026, 6, 10, 12, 1, tzinfo=timezone.utc),
-                "price": 191.0,
+                "date": datetime(2026, 6, 11, 12, 0, tzinfo=timezone.utc),
+                "price": 193.0,
             },
         )
 
@@ -73,7 +83,11 @@ class ChartEndpointTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response["status"], "success")
         self.assertEqual(response["ticker"], "AAPL")
-        self.assertEqual([point["price"] for point in response["data"]], [190.0, 191.0])
+        self.assertEqual([point["price"] for point in response["data"]], [191.0, 193.0])
+        self.assertEqual(response["data"][0]["open"], 190.0)
+        self.assertEqual(response["data"][0]["high"], 192.0)
+        self.assertEqual(response["data"][0]["low"], 190.0)
+        self.assertEqual(response["data"][0]["close"], 191.0)
         self.assertEqual(trades.find_calls[0]["ticker"], "AAPL")
         self.assertEqual(trades.find_calls[1]["symbol"], "AAPL")
         self.assertEqual(trades.find_one_calls, [])
