@@ -36,6 +36,37 @@ class InvestorAgentEndpointTests(unittest.IsolatedAsyncioTestCase):
         start_run.assert_not_awaited()
         self.assertEqual(response["status"], "disabled")
 
+    async def test_v2_start_endpoint_runs_first_cycle_after_creating_run(self):
+        with (
+            patch.object(main, "ENABLE_INVESTOR_AGENT_V2", True),
+            patch.object(
+                main,
+                "start_agent_v2_run",
+                AsyncMock(return_value={"status": "started", "run": {"run_id": "run-v2"}}),
+            ) as start_run,
+            patch.object(
+                main,
+                "run_daily_agent_v2_cycle",
+                AsyncMock(return_value={"status": "success", "run_id": "run-v2"}),
+            ) as run_cycle,
+        ):
+            response = await main.start_investor_agent_v2()
+
+        start_run.assert_awaited_once_with(main.db)
+        run_cycle.assert_awaited_once()
+        self.assertEqual(response["status"], "started")
+        self.assertEqual(response["first_cycle"]["status"], "success")
+
+    async def test_v2_start_endpoint_respects_disabled_flag(self):
+        with (
+            patch.object(main, "ENABLE_INVESTOR_AGENT_V2", False),
+            patch.object(main, "start_agent_v2_run", AsyncMock()) as start_run,
+        ):
+            response = await main.start_investor_agent_v2()
+
+        start_run.assert_not_awaited()
+        self.assertEqual(response["status"], "disabled")
+
 
 if __name__ == "__main__":
     unittest.main()

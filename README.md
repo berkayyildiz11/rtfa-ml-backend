@@ -126,6 +126,7 @@ USE_FINBERT_FOR_PREDICTION=true
 MAX_PREDICTION_SENTIMENT_ARTICLES=5
 
 ENABLE_INVESTOR_AGENT=true
+ENABLE_INVESTOR_AGENT_V2=true
 INVESTOR_AGENT_CHECK_INTERVAL_SECONDS=3600
 INVESTOR_AGENT_INITIAL_DELAY_SECONDS=30
 ```
@@ -176,9 +177,11 @@ The current test coverage includes:
 - Short-horizon and long-horizon sentiment rules
 - Weight adjustment and calibrated signal behavior
 
-## Paper-Trading Investor Agent
+## Paper-Trading Investor Agents
 
-The investor agent is isolated from the prediction models and existing market data collections. It uses the same `MONGODB_URI` and `stock_tracking_db`, but writes only to these collections:
+The investor agents are isolated from the prediction models and existing market data collections. They use the same `MONGODB_URI` and `stock_tracking_db`, but write only to agent-specific collections.
+
+Version 1 is the original 8-day run and keeps its initial behavior:
 
 ```txt
 agent_runs
@@ -206,10 +209,33 @@ GET /api/agent/status
 GET /api/agent/history
 ```
 
-Disable automatic agent operation after the test by setting:
+Version 2 is a separate 5-day run. It can top up existing high-confidence positions while still respecting the max position cap:
+
+```txt
+agent_v2_runs
+agent_v2_decisions
+agent_v2_trades
+agent_v2_portfolio_snapshots
+```
+
+Start the separate v2 run:
+
+```http
+POST /api/agent-v2/start
+```
+
+View v2 results:
+
+```http
+GET /api/agent-v2/status
+GET /api/agent-v2/history
+```
+
+Disable automatic agent operation after the tests by setting:
 
 ```env
 ENABLE_INVESTOR_AGENT=false
+ENABLE_INVESTOR_AGENT_V2=false
 ```
 
 ## Project Structure

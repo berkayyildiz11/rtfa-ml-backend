@@ -26,6 +26,13 @@ from src.services.investor_agent import (
     run_daily_agent_cycle,
     start_agent_run,
 )
+from src.services.investor_agent_v2 import (
+    get_agent_v2_history,
+    get_agent_v2_status,
+    liquidate_agent_v2_run,
+    run_daily_agent_v2_cycle,
+    start_agent_v2_run,
+)
 
 # .env dosyasını yükle
 load_dotenv()
@@ -40,6 +47,7 @@ NEWS_KEY = os.environ.get("FINNHUB_API_KEY")
 # Arka plan veri çekme işlemini açıp kapatmak için bir bayrak (Deploy için varsayılanı "true" yaptık) (Local testler için "false" yapın) ("ENABLE_POLLER" bunu yanındaki değeri.)
 ENABLE_POLLER = os.environ.get("ENABLE_POLLER", "true").lower() == "true"
 ENABLE_INVESTOR_AGENT = os.environ.get("ENABLE_INVESTOR_AGENT", "true").lower() == "true"
+ENABLE_INVESTOR_AGENT_V2 = os.environ.get("ENABLE_INVESTOR_AGENT_V2", "true").lower() == "true"
 INVESTOR_AGENT_CHECK_INTERVAL_SECONDS = int(os.environ.get("INVESTOR_AGENT_CHECK_INTERVAL_SECONDS", "3600"))
 INVESTOR_AGENT_INITIAL_DELAY_SECONDS = int(os.environ.get("INVESTOR_AGENT_INITIAL_DELAY_SECONDS", "30"))
 
@@ -121,16 +129,39 @@ async def run_investor_agent_scheduler():
 
         await asyncio.sleep(INVESTOR_AGENT_CHECK_INTERVAL_SECONDS)
 
+
+async def run_investor_agent_v2_scheduler():
+    """Runs the v2 paper-trading agent once per calendar day while a run is active."""
+    await asyncio.sleep(INVESTOR_AGENT_INITIAL_DELAY_SECONDS)
+    while True:
+        try:
+            active_run = await db.agent_v2_runs.find_one({"status": "active"}, {"_id": 0})
+            if active_run:
+                result = await run_daily_agent_v2_cycle(
+                    db,
+                    tickers=STOCKS,
+                    build_prediction_bundle=build_agent_prediction_bundle,
+                )
+                if result.get("status") not in {"already_ran_today", "success", "completed"}:
+                    print(f"Investor agent v2 cycle skipped: {result}")
+        except Exception as exc:
+            print(f"Investor agent v2 scheduler error: {exc}")
+
+        await asyncio.sleep(INVESTOR_AGENT_CHECK_INTERVAL_SECONDS)
+
 # --- 3. FASTAPI YAŞAM DÖNGÜSÜ (LIFESPAN) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     worker_task = None
     news_task = None
     investor_agent_task = None
+    investor_agent_v2_task = None
     if ENABLE_POLLER:
         worker_task = asyncio.create_task(poll_stocks_every_50_seconds())
     if ENABLE_INVESTOR_AGENT:
         investor_agent_task = asyncio.create_task(run_investor_agent_scheduler())
+    if ENABLE_INVESTOR_AGENT_V2:
+        investor_agent_v2_task = asyncio.create_task(run_investor_agent_v2_scheduler())
     warm_news_cache_from_disk()
     news_task = asyncio.create_task(refresh_news_every_hour())
     yield
@@ -140,6 +171,8 @@ async def lifespan(app: FastAPI):
         news_task.cancel()
     if investor_agent_task:
         investor_agent_task.cancel()
+    if investor_agent_v2_task:
+        investor_agent_v2_task.cancel()
     if NEWS_REFRESH_TASK:
         NEWS_REFRESH_TASK.cancel()
 
@@ -671,3 +704,61 @@ async def get_investor_agent_history(
     limit: int = Query(100, ge=1, le=1000),
 ):
     return await get_agent_history(db, limit=limit)
+
+
+@app.post("/api/agent-v2/start")
+async def start_investor_agent_v2():
+    if not ENABLE_INVESTOR_AGENT_V2:
+        return {"status": "disabled", "message": "Investor agent v2 is disabled by ENABLE_INVESTOR_AGENT_V2."}
+
+    start_result = await start_agent_v2_run(db)
+    if start_result["status"] != "started":
+        return start_result
+
+    first_cycle = await run_daily_agent_v2_cycle(
+        db,
+        tickers=STOCKS,
+        build_prediction_bundle=build_agent_prediction_bundle,
+    )
+    return {
+        **start_result,
+        "first_cycle": first_cycle,
+    }
+
+
+@app.post("/api/agent-v2/run-daily-cycle")
+async def run_investor_agent_v2_daily_cycle(
+    force: bool = Query(False, description="Allow another decision cycle for today's date"),
+):
+    if not ENABLE_INVESTOR_AGENT_V2:
+        return {"status": "disabled", "message": "Investor agent v2 is disabled by ENABLE_INVESTOR_AGENT_V2."}
+
+    return await run_daily_agent_v2_cycle(
+        db,
+        tickers=STOCKS,
+        build_prediction_bundle=build_agent_prediction_bundle,
+        force=force,
+    )
+
+
+@app.post("/api/agent-v2/liquidate")
+async def liquidate_investor_agent_v2(
+    reason: str = Query("manual_liquidation"),
+):
+    return await liquidate_agent_v2_run(
+        db,
+        price_lookup=lookup_agent_liquidation_price,
+        reason=reason,
+    )
+
+
+@app.get("/api/agent-v2/status")
+async def get_investor_agent_v2_status():
+    return await get_agent_v2_status(db)
+
+
+@app.get("/api/agent-v2/history")
+async def get_investor_agent_v2_history(
+    limit: int = Query(100, ge=1, le=1000),
+):
+    return await get_agent_v2_history(db, limit=limit)
