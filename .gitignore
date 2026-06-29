@@ -215,3 +215,7 @@ __marimo__/
 
 # =========================
 document_reviews/
+
+# Local presentation artifacts generated during Codex-assisted deck work
+outputs/
+scripts/build_finsense_presentation.mjs
